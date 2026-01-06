@@ -14,10 +14,6 @@ dev:
 
 # Apply application SQL migrations
 migrate:
-	PGPASSWORD="$(DB_PASSWORD)" psql \
-		-h "$(DB_HOST)" \
-		-p "$(DB_PORT)" \
-		-U "$(DB_USER)" \
-		-d "$(DB_NAME)" \
-		--set ON_ERROR_STOP=1 \
-		-f app-migrations/init.sql
+	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required" >&2; exit 1)
+	psql -v ON_ERROR_STOP=1 "$$DATABASE_URL" -f app_migrations/init.sql
+

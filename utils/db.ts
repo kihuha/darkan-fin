@@ -6,16 +6,14 @@ const pgp = pgPromise({
   // Example: error logging, query logging, etc.
 });
 
-// Connection configuration
-const connectionConfig = {
-  host: "localhost",
-  port: 5432,
-  database: "darkanfin",
-  user: process.env.DB_USER || "postgres",
-  password: process.env.DB_PASSWORD || "",
-};
+// Require DATABASE_URL for connection string clarity
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set");
+}
 
 // Create and export the database instance
-const db = pgp(connectionConfig);
+const db = pgp(connectionString);
 
 export default db;
