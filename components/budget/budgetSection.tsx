@@ -83,15 +83,17 @@ export const BudgetSection = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Budget</h2>
-        <p className="text-muted-foreground">
+      <div className="space-y-1">
+        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          Budget
+        </h2>
+        <p className="text-sm text-muted-foreground sm:text-base">
           Plan your monthly budget by allocating amounts to categories
         </p>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="w-45">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="w-full sm:w-52">
           <Select
             value={selectedYear.toString()}
             onValueChange={(value) => setSelectedYear(parseInt(value))}
@@ -114,16 +116,24 @@ export const BudgetSection = () => {
         value={selectedMonth.toString()}
         onValueChange={(value) => setSelectedMonth(parseInt(value))}
       >
-        <TabsList className="grid w-full grid-cols-12">
+        <TabsList className="h-auto w-full flex-nowrap gap-2 overflow-x-auto  border border-border/70 bg-white/70 p-2 shadow-sm backdrop-blur">
           {MONTHS.map((month, index) => (
-            <TabsTrigger key={month} value={(index + 1).toString()}>
+            <TabsTrigger
+              key={month}
+              value={(index + 1).toString()}
+              className="flex-none px-3 py-1.5"
+            >
               {month.slice(0, 3)}
             </TabsTrigger>
           ))}
         </TabsList>
 
         {MONTHS.map((month, index) => (
-          <TabsContent key={month} value={(index + 1).toString()}>
+          <TabsContent
+            key={month}
+            value={(index + 1).toString()}
+            className="mt-4"
+          >
             {isLoading ? (
               <div className="space-y-4">
                 <Skeleton className="h-12 w-full" />

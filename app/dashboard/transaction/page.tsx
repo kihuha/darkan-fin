@@ -2,7 +2,7 @@ import { TransactionSection } from "@/components/transaction/transactionSection"
 
 export default function TransactionPage() {
   return (
-    <div>
+    <div className="animate-fade-up">
       <TransactionSection />
     </div>
   );

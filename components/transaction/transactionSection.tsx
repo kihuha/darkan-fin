@@ -125,9 +125,9 @@ export const TransactionSection = () => {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <Skeleton className="h-8 w-32" />
-          <Skeleton className="h-10 w-32" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-10 w-full sm:w-40" />
         </div>
         <div className="space-y-2">
           <Skeleton className="h-12 w-full" />
@@ -140,22 +140,24 @@ export const TransactionSection = () => {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Transactions</h2>
-          <p className="text-muted-foreground">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Transactions
+          </h2>
+          <p className="text-sm text-muted-foreground sm:text-base">
             Track all your income and expenses
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <Plus className="mr-2 h-4 w-4" />
               New Transaction
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-125">
             <DialogHeader>
               <DialogTitle>
                 {selectedTransaction ? "Edit Transaction" : "New Transaction"}

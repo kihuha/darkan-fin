@@ -174,7 +174,7 @@ export function TransactionForm({
                 />
               </FormControl>
               <FormDescription>
-                Enter the transaction amount in dollars
+                Enter the transaction amount
               </FormDescription>
               <FormMessage />
             </FormItem>

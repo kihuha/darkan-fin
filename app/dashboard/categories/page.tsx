@@ -2,7 +2,7 @@ import { CategorySection } from "@/components/category/categorySection";
 
 export default function CategoriesPage() {
   return (
-    <div>
+    <div className="animate-fade-up">
       <CategorySection />
     </div>
   );

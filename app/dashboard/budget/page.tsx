@@ -2,7 +2,7 @@ import { BudgetSection } from "@/components/budget/budgetSection";
 
 export default function BudgetPage() {
   return (
-    <div>
+    <div className="animate-fade-up">
       <BudgetSection />
     </div>
   );

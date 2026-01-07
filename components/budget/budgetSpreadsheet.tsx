@@ -189,68 +189,70 @@ export function BudgetSpreadsheet({
   ) => (
     <div className="space-y-2">
       <h3 className="text-lg font-semibold">{title}</h3>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[60%]">Category</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {cats.length === 0 ? (
+      <div className=" border border-white/60 bg-white/70 shadow-sm backdrop-blur">
+        <div className="overflow-x-auto">
+          <Table className="min-w-90">
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={2}
-                  className="text-center text-muted-foreground"
-                >
-                  {emptyMessage}
-                </TableCell>
+                <TableHead className="w-[60%]">Category</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
               </TableRow>
-            ) : (
-              <>
-                {cats.map((category) => (
-                  <TableRow key={category.category_id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <span>{category.category_name}</span>
-                        {category.repeats && (
-                          <span className="text-xs text-muted-foreground">
-                            (Recurring)
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        className="text-right font-mono"
-                        value={budgetItems.get(category.category_id) || 0}
-                        onChange={(e) =>
-                          handleAmountChange(
-                            category.category_id,
-                            e.target.value
-                          )
-                        }
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-                <TableRow className="bg-muted/50 font-bold">
-                  <TableCell>Total</TableCell>
-                  <TableCell className="text-right font-mono">
-                    {calculateTotal(cats).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+            </TableHeader>
+            <TableBody>
+              {cats.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={2}
+                    className="text-center text-muted-foreground"
+                  >
+                    {emptyMessage}
                   </TableCell>
                 </TableRow>
-              </>
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                <>
+                  {cats.map((category) => (
+                    <TableRow key={category.category_id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>{category.category_name}</span>
+                          {category.repeats && (
+                            <span className="text-xs text-muted-foreground">
+                              (Recurring)
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="text-right font-mono"
+                          value={budgetItems.get(category.category_id) || 0}
+                          onChange={(e) =>
+                            handleAmountChange(
+                              category.category_id,
+                              e.target.value
+                            )
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="bg-muted/40 font-semibold">
+                    <TableCell>Total</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {calculateTotal(cats).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </TableCell>
+                  </TableRow>
+                </>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );
@@ -261,7 +263,7 @@ export function BudgetSpreadsheet({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mt-4">
+      <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <div className="text-sm text-muted-foreground">
             Net Amount:{" "}
@@ -277,8 +279,12 @@ export function BudgetSpreadsheet({
             </span>
           </div>
         </div>
-        <div className="flex gap-x-4">
-          <Button onClick={handleSave} disabled={isSaving}>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="w-full sm:w-auto"
+          >
             {isSaving ? (
               <>
                 <Save className="mr-2 h-4 w-4 animate-pulse" />
@@ -291,7 +297,11 @@ export function BudgetSpreadsheet({
               </>
             )}
           </Button>
-          <Button onClick={handleDownload} variant="outline">
+          <Button
+            onClick={handleDownload}
+            variant="outline"
+            className="w-full sm:w-auto"
+          >
             <Download className="mr-2 h-4 w-4" />
             Download XLSX
           </Button>
@@ -299,7 +309,7 @@ export function BudgetSpreadsheet({
       </div>
 
       {categories.length === 0 ? (
-        <div className="rounded-md border p-8 text-center text-muted-foreground">
+        <div className=" border border-white/60 bg-white/70 p-8 text-center text-muted-foreground shadow-sm backdrop-blur">
           No categories available. Create categories first.
         </div>
       ) : (
