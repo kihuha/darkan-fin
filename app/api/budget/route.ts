@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/utils/db";
 import { createBudgetSchema } from "@/lib/validations/budget";
+import { ApiError, requireFamilyContext } from "@/utils/auth-helpers";
 
 // GET - Fetch budget for a specific month and year with all items
 export async function GET(request: NextRequest) {
   try {
+    const { familyId } = await requireFamilyContext(request.headers);
     const { searchParams } = new URL(request.url);
     const month = searchParams.get("month");
     const year = searchParams.get("year");
@@ -30,32 +32,36 @@ export async function GET(request: NextRequest) {
     let budget = await db.oneOrNone(
       `SELECT id, month, year, created_at, updated_at 
        FROM budget 
-       WHERE month = $1 AND year = $2`,
-      [monthNum, yearNum]
+       WHERE family_id = $1 AND month = $2 AND year = $3`,
+      [familyId, monthNum, yearNum]
     );
 
     if (!budget) {
       budget = await db.one(
-        `INSERT INTO budget (month, year)
-         VALUES ($1, $2)
+        `INSERT INTO budget (family_id, month, year)
+         VALUES ($1, $2, $3)
          RETURNING id, month, year, created_at, updated_at`,
-        [monthNum, yearNum]
+        [familyId, monthNum, yearNum]
       );
     }
 
     // Get all categories
-    const categories = await db.any(`
+    const categories = await db.any(
+      `
       SELECT id, name, type, amount, repeats, description
       FROM category
+      WHERE family_id = $1
       ORDER BY type DESC, name ASC
-    `);
+    `,
+      [familyId]
+    );
 
     // Get existing budget items for this budget
     const items = await db.any(
       `SELECT id, budget_id, category_id, amount, created_at, updated_at
        FROM budget_item
-       WHERE budget_id = $1`,
-      [budget.id]
+       WHERE budget_id = $1 AND family_id = $2`,
+      [budget.id, familyId]
     );
 
     // Create a map of category_id -> budget_item for quick lookup
@@ -89,6 +95,12 @@ export async function GET(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error fetching budget:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch budget" },
@@ -100,6 +112,7 @@ export async function GET(request: NextRequest) {
 // POST - Create or update budget items
 export async function POST(request: NextRequest) {
   try {
+    const { familyId } = await requireFamilyContext(request.headers);
     const body = await request.json();
     const validationResult = createBudgetSchema.safeParse(body);
 
@@ -118,27 +131,48 @@ export async function POST(request: NextRequest) {
 
     // Get or create budget
     let budget = await db.oneOrNone(
-      `SELECT id FROM budget WHERE month = $1 AND year = $2`,
-      [month, year]
+      `SELECT id FROM budget WHERE family_id = $1 AND month = $2 AND year = $3`,
+      [familyId, month, year]
     );
 
     if (!budget) {
       budget = await db.one(
-        `INSERT INTO budget (month, year)
-         VALUES ($1, $2)
+        `INSERT INTO budget (family_id, month, year)
+         VALUES ($1, $2, $3)
          RETURNING id`,
-        [month, year]
+        [familyId, month, year]
       );
+    }
+
+    const categoryIds = Array.from(
+      new Set(items.map((item) => item.category_id))
+    );
+
+    if (categoryIds.length > 0) {
+      const validCategories = await db.any(
+        `SELECT id
+         FROM category
+         WHERE family_id = $1
+           AND id IN ($2:csv)`,
+        [familyId, categoryIds]
+      );
+
+      if (validCategories.length !== categoryIds.length) {
+        return NextResponse.json(
+          { success: false, error: "One or more categories are invalid" },
+          { status: 400 }
+        );
+      }
     }
 
     // Upsert budget items
     for (const item of items) {
       await db.none(
-        `INSERT INTO budget_item (budget_id, category_id, amount)
-         VALUES ($1, $2, $3)
+        `INSERT INTO budget_item (budget_id, category_id, amount, family_id)
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT (budget_id, category_id) 
          DO UPDATE SET amount = $3, updated_at = NOW()`,
-        [budget.id, item.category_id, item.amount]
+        [budget.id, item.category_id, item.amount, familyId]
       );
     }
 
@@ -147,6 +181,12 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error saving budget:", error);
     return NextResponse.json(
       { success: false, error: "Failed to save budget" },

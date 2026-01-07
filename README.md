@@ -43,3 +43,22 @@ import db from '@/utils/db';
 // Example query
 const users = await db.any('SELECT * FROM users');
 ```
+
+## Environment
+
+Set these variables for family invites and auth:
+
+```
+APP_URL=http://localhost:3000
+INVITE_TOKEN_PEPPER=replace-with-a-long-random-string
+```
+
+## Migrations
+
+Run database migrations with:
+
+```
+make migrate
+```
+
+yarn dlx shadcn@latest create --preset "https://ui.shadcn.com/init?base=radix&style=mira&baseColor=neutral&theme=emerald&iconLibrary=hugeicons&font=figtree&menuAccent=subtle&menuColor=default&radius=default&template=next" --template next

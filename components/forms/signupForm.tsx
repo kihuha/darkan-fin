@@ -23,7 +23,11 @@ type SignupFormData = {
   confirmPassword: string;
 };
 
-export const SignupForm = () => {
+type SignupFormProps = {
+  redirectTo?: string;
+};
+
+export const SignupForm = ({ redirectTo }: SignupFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -65,7 +69,7 @@ export const SignupForm = () => {
 
       toast.success("Account created successfully!");
       // Redirect to dashboard or home page after successful signup
-      router.push("/dashboard");
+      router.push(redirectTo || "/dashboard");
       router.refresh();
     } catch (err) {
       const errorMessage =

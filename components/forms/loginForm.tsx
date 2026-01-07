@@ -21,7 +21,11 @@ type LoginFormData = {
   password: string;
 };
 
-export const LoginForm = () => {
+type LoginFormProps = {
+  redirectTo?: string;
+};
+
+export const LoginForm = ({ redirectTo }: LoginFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -52,7 +56,7 @@ export const LoginForm = () => {
 
       toast.success("Successfully signed in!");
       // Redirect to dashboard or home page after successful login
-      router.push("/dashboard");
+      router.push(redirectTo || "/dashboard");
       router.refresh();
     } catch (err) {
       const errorMessage =

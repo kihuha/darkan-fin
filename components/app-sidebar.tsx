@@ -13,7 +13,7 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { Home, Layers2, List, LogOut, Sheet } from "lucide-react";
+import { Home, Layers2, List, LogOut, Settings, Sheet } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -53,12 +53,17 @@ export function AppSidebar() {
       url: "/dashboard/budget",
       icon: Sheet,
     },
+    {
+      title: "Settings",
+      url: "/dashboard/settings",
+      icon: Settings,
+    },
   ];
 
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className=" border border-sidebar-border bg-white/80 p-3 shadow-sm backdrop-blur">
+        <div className="rounded-2xl border border-sidebar-border bg-white/80 p-3 shadow-sm backdrop-blur">
           <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
             Darkan Fin
           </p>

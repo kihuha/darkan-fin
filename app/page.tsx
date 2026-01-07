@@ -8,7 +8,13 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams?: { redirect?: string };
+}) {
+  const redirectTo = searchParams?.redirect;
+
   return (
     <div className="relative min-h-svh overflow-hidden bg-auth">
       <div className="pointer-events-none absolute inset-0 page-grid opacity-30" />
@@ -47,7 +53,7 @@ export default function LoginPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <LoginForm />
+              <LoginForm redirectTo={redirectTo} />
               <p className="text-center text-sm text-muted-foreground">
                 Don&apos;t have an account?{" "}
                 <Link className="font-medium text-primary" href="/signup">

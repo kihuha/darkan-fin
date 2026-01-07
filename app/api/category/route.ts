@@ -4,21 +4,34 @@ import {
   createCategorySchema,
   updateCategorySchema,
 } from "@/lib/validations/category";
+import { ApiError, requireFamilyContext } from "@/utils/auth-helpers";
 
 // GET - Fetch all categories
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const categories = await db.any(`
-      SELECT id, name, type, amount, repeats, description, created_at, updated_at
-      FROM category
-      ORDER BY name ASC
-    `);
+    const { familyId } = await requireFamilyContext(request.headers);
+
+    const categories = await db.any(
+      `
+        SELECT id, name, type, amount, repeats, description, created_at, updated_at
+        FROM category
+        WHERE family_id = $1
+        ORDER BY name ASC
+      `,
+      [familyId]
+    );
 
     return NextResponse.json(
       { success: true, data: categories },
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error fetching categories:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch categories" },
@@ -30,6 +43,7 @@ export async function GET() {
 // POST - Create a new category
 export async function POST(request: NextRequest) {
   try {
+    const { familyId } = await requireFamilyContext(request.headers);
     const body = await request.json();
 
     // Validate request body
@@ -50,8 +64,8 @@ export async function POST(request: NextRequest) {
 
     // Check if category with same name already exists
     const existing = await db.oneOrNone(
-      "SELECT id FROM category WHERE LOWER(name) = LOWER($1)",
-      [name]
+      "SELECT id FROM category WHERE family_id = $1 AND LOWER(name) = LOWER($2)",
+      [familyId, name]
     );
 
     if (existing) {
@@ -63,10 +77,10 @@ export async function POST(request: NextRequest) {
 
     // Insert new category
     const newCategory = await db.one(
-      `INSERT INTO category (name, type, amount, repeats, description)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO category (family_id, name, type, amount, repeats, description)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, name, type, amount, repeats, description, created_at, updated_at`,
-      [name, type, amount ?? 0, repeats, description || null]
+      [familyId, name, type, amount ?? 0, repeats, description || null]
     );
 
     return NextResponse.json(
@@ -74,6 +88,12 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error creating category:", error);
     return NextResponse.json(
       { success: false, error: "Failed to create category" },
@@ -85,6 +105,7 @@ export async function POST(request: NextRequest) {
 // PATCH - Update an existing category
 export async function PATCH(request: NextRequest) {
   try {
+    const { familyId } = await requireFamilyContext(request.headers);
     const body = await request.json();
 
     // Validate request body
@@ -106,8 +127,8 @@ export async function PATCH(request: NextRequest) {
 
     // Check if category exists
     const existing = await db.oneOrNone(
-      "SELECT id FROM category WHERE id = $1",
-      [id]
+      "SELECT id FROM category WHERE id = $1 AND family_id = $2",
+      [id, familyId]
     );
 
     if (!existing) {
@@ -120,8 +141,12 @@ export async function PATCH(request: NextRequest) {
     // Check if another category with the same name exists (if name is being updated)
     if (name) {
       const duplicate = await db.oneOrNone(
-        "SELECT id FROM category WHERE LOWER(name) = LOWER($1) AND id != $2",
-        [name, id]
+        `SELECT id
+         FROM category
+         WHERE family_id = $1
+           AND LOWER(name) = LOWER($2)
+           AND id != $3`,
+        [familyId, name, id]
       );
 
       if (duplicate) {
@@ -159,12 +184,12 @@ export async function PATCH(request: NextRequest) {
     }
 
     updates.push(`updated_at = NOW()`);
-    values.push(id);
+    values.push(id, familyId);
 
     const query = `
       UPDATE category
       SET ${updates.join(", ")}
-      WHERE id = $${paramCount}
+      WHERE id = $${paramCount} AND family_id = $${paramCount + 1}
       RETURNING id, name, type, amount, repeats, description, created_at, updated_at
     `;
 
@@ -175,6 +200,12 @@ export async function PATCH(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error updating category:", error);
     return NextResponse.json(
       { success: false, error: "Failed to update category" },
@@ -186,6 +217,7 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete a category and move its items to "Uncategorized"
 export async function DELETE(request: NextRequest) {
   try {
+    const { familyId } = await requireFamilyContext(request.headers);
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
@@ -198,8 +230,8 @@ export async function DELETE(request: NextRequest) {
 
     // Check if category exists
     const category = await db.oneOrNone(
-      "SELECT id, name FROM category WHERE id = $1",
-      [id]
+      "SELECT id, name FROM category WHERE id = $1 AND family_id = $2",
+      [id, familyId]
     );
 
     if (!category) {
@@ -219,14 +251,18 @@ export async function DELETE(request: NextRequest) {
 
     // Get or create Uncategorized category
     let uncategorized = await db.oneOrNone(
-      "SELECT id FROM category WHERE LOWER(name) = 'uncategorized'"
+      "SELECT id FROM category WHERE family_id = $1 AND LOWER(name) = 'uncategorized'",
+      [familyId]
     );
 
     if (!uncategorized) {
       uncategorized = await db.one(
-        `INSERT INTO category (name, type, amount, repeats, description)
-         VALUES ('Uncategorized', 'expense', 0, false, 'Default category for uncategorized items')
-         RETURNING id`
+        `INSERT INTO category (family_id, name, type, amount, repeats, description)
+         VALUES ($1, 'Uncategorized', 'expense', 0, false, 'Default category for uncategorized items')
+         ON CONFLICT (family_id, LOWER(name))
+         DO UPDATE SET updated_at = NOW()
+         RETURNING id`,
+        [familyId]
       );
     }
 
@@ -234,18 +270,27 @@ export async function DELETE(request: NextRequest) {
     await db.none(
       `UPDATE budget_item 
        SET category_id = $1 
-       WHERE category_id = $2`,
-      [uncategorized.id, id]
+       WHERE category_id = $2 AND family_id = $3`,
+      [uncategorized.id, id, familyId]
     );
 
     // Delete the category
-    await db.none("DELETE FROM category WHERE id = $1", [id]);
+    await db.none("DELETE FROM category WHERE id = $1 AND family_id = $2", [
+      id,
+      familyId,
+    ]);
 
     return NextResponse.json(
       { success: true, message: "Category deleted successfully" },
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error deleting category:", error);
     return NextResponse.json(
       { success: false, error: "Failed to delete category" },

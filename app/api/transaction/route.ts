@@ -1,23 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/utils/db";
-import { auth } from "@/utils/auth";
 import {
   createTransactionSchema,
   updateTransactionSchema,
 } from "@/lib/validations/transaction";
+import { ApiError, requireFamilyContext } from "@/utils/auth-helpers";
 
 // GET - Fetch all transactions for the logged-in user
 export async function GET(request: NextRequest) {
   try {
-    // Get session from better-auth
-    const session = await auth.api.getSession({ headers: request.headers });
-
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const { familyId } = await requireFamilyContext(request.headers);
 
     const transactions = await db.any(
       `
@@ -34,10 +26,10 @@ export async function GET(request: NextRequest) {
         c.type as category_type
       FROM transaction t
       JOIN category c ON t.category_id = c.id
-      WHERE t.user_id = $1
+      WHERE t.family_id = $1 AND c.family_id = $1
       ORDER BY t.transaction_date DESC, t.created_at DESC
     `,
-      [session.user.id]
+      [familyId]
     );
 
     return NextResponse.json(
@@ -45,6 +37,12 @@ export async function GET(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error fetching transactions:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch transactions" },
@@ -56,15 +54,7 @@ export async function GET(request: NextRequest) {
 // POST - Create a new transaction
 export async function POST(request: NextRequest) {
   try {
-    // Get session from better-auth
-    const session = await auth.api.getSession({ headers: request.headers });
-
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const { familyId, userId } = await requireFamilyContext(request.headers);
 
     const body = await request.json();
 
@@ -87,8 +77,8 @@ export async function POST(request: NextRequest) {
 
     // Verify category exists
     const category = await db.oneOrNone(
-      "SELECT id FROM category WHERE id = $1",
-      [categoryId]
+      "SELECT id FROM category WHERE id = $1 AND family_id = $2",
+      [categoryId, familyId]
     );
 
     if (!category) {
@@ -100,15 +90,16 @@ export async function POST(request: NextRequest) {
 
     // Insert new transaction
     const newTransaction = await db.one(
-      `INSERT INTO transaction (category_id, user_id, amount, transaction_date, description)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO transaction (category_id, user_id, amount, transaction_date, description, family_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, category_id as "categoryId", user_id as "userId", amount, transaction_date as "transactionDate", description, created_at, updated_at`,
       [
         categoryId,
-        session.user.id,
+        userId,
         amount,
         transactionDate,
         description || null,
+        familyId,
       ]
     );
 
@@ -117,6 +108,12 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error creating transaction:", error);
     return NextResponse.json(
       { success: false, error: "Failed to create transaction" },
@@ -128,15 +125,7 @@ export async function POST(request: NextRequest) {
 // PATCH - Update an existing transaction
 export async function PATCH(request: NextRequest) {
   try {
-    // Get session from better-auth
-    const session = await auth.api.getSession({ headers: request.headers });
-
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const { familyId } = await requireFamilyContext(request.headers);
 
     const body = await request.json();
 
@@ -157,10 +146,10 @@ export async function PATCH(request: NextRequest) {
     const { id, categoryId, amount, transactionDate, description } =
       validationResult.data;
 
-    // Check if transaction exists and belongs to user
+    // Check if transaction exists in the family
     const existing = await db.oneOrNone(
-      "SELECT id FROM transaction WHERE id = $1 AND user_id = $2",
-      [id, session.user.id]
+      "SELECT id FROM transaction WHERE id = $1 AND family_id = $2",
+      [id, familyId]
     );
 
     if (!existing) {
@@ -173,8 +162,8 @@ export async function PATCH(request: NextRequest) {
     // If categoryId is provided, verify it exists
     if (categoryId) {
       const category = await db.oneOrNone(
-        "SELECT id FROM category WHERE id = $1",
-        [categoryId]
+        "SELECT id FROM category WHERE id = $1 AND family_id = $2",
+        [categoryId, familyId]
       );
 
       if (!category) {
@@ -217,12 +206,14 @@ export async function PATCH(request: NextRequest) {
     updates.push(`updated_at = NOW()`);
 
     values.push(id);
+    values.push(familyId);
     const idParam = `$${paramCount}`;
+    const familyParam = `$${paramCount + 1}`;
 
     const query = `
       UPDATE transaction
       SET ${updates.join(", ")}
-      WHERE id = ${idParam}
+      WHERE id = ${idParam} AND family_id = ${familyParam}
       RETURNING id, category_id as "categoryId", user_id as "userId", amount, transaction_date as "transactionDate", description, created_at, updated_at
     `;
 
@@ -233,6 +224,12 @@ export async function PATCH(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error updating transaction:", error);
     return NextResponse.json(
       { success: false, error: "Failed to update transaction" },
@@ -244,15 +241,7 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete a transaction
 export async function DELETE(request: NextRequest) {
   try {
-    // Get session from better-auth
-    const session = await auth.api.getSession({ headers: request.headers });
-
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const { familyId } = await requireFamilyContext(request.headers);
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
@@ -264,10 +253,10 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Check if transaction exists and belongs to user
+    // Check if transaction exists in the family
     const existing = await db.oneOrNone(
-      "SELECT id FROM transaction WHERE id = $1 AND user_id = $2",
-      [id, session.user.id]
+      "SELECT id FROM transaction WHERE id = $1 AND family_id = $2",
+      [id, familyId]
     );
 
     if (!existing) {
@@ -277,13 +266,22 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await db.none("DELETE FROM transaction WHERE id = $1", [id]);
+    await db.none("DELETE FROM transaction WHERE id = $1 AND family_id = $2", [
+      id,
+      familyId,
+    ]);
 
     return NextResponse.json(
       { success: true, message: "Transaction deleted successfully" },
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof ApiError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: error.status }
+      );
+    }
     console.error("Error deleting transaction:", error);
     return NextResponse.json(
       { success: false, error: "Failed to delete transaction" },
