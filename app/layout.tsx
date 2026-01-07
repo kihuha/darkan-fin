@@ -29,10 +29,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${figtree.variable} ${bricolageGrotesque.variable} ${jetBrainsMono.variable} font-sans antialiased`}
-      >
+    <html
+      lang="en"
+      className={`${figtree.variable} ${bricolageGrotesque.variable} ${jetBrainsMono.variable}`}
+    >
+      <body className="font-sans antialiased">
         {children}
 
         <Toaster />
