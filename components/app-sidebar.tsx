@@ -10,7 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Home, Layers2, Sheet } from "lucide-react";
+import { Home, Layers2, List, Sheet } from "lucide-react";
 
 export function AppSidebar() {
   const items = [
@@ -18,6 +18,11 @@ export function AppSidebar() {
       title: "Dashboard",
       url: "/dashboard",
       icon: Home,
+    },
+    {
+      title: "Transactions",
+      url: "/dashboard/transaction",
+      icon: List,
     },
     {
       title: "Categories",

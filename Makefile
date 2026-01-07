@@ -16,6 +16,7 @@ dev:
 migrate:
 	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required" >&2; exit 1)
 	psql -v ON_ERROR_STOP=1 "$$DATABASE_URL" -f app_migrations/init.sql
+	psql -v ON_ERROR_STOP=1 "$$DATABASE_URL" -f app_migrations/add_transaction.sql
 
 # Seed reference data
 seed:
