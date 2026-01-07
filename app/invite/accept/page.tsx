@@ -10,11 +10,12 @@ import {
 } from "@/components/ui/card";
 import { InviteAcceptanceCard } from "@/components/settings/inviteAcceptanceCard";
 
-export default async function InviteAcceptPage({
-  searchParams,
-}: {
-  searchParams?: { token?: string };
-}) {
+export default async function InviteAcceptPage(
+  props: {
+    searchParams?: Promise<{ token?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const token = searchParams?.token;
 
   if (!token) {

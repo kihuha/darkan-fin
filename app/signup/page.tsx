@@ -8,11 +8,12 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 
-export default function LoginPage({
-  searchParams,
-}: {
-  searchParams?: { redirect?: string };
-}) {
+export default async function LoginPage(
+  props: {
+    searchParams?: Promise<{ redirect?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const redirectTo = searchParams?.redirect;
 
   return (
