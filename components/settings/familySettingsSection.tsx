@@ -12,7 +12,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -53,7 +58,10 @@ type FamilyData = {
   invites: FamilyInvite[];
 };
 
-const statusVariant: Record<FamilyInvite["status"], "default" | "secondary" | "outline" | "destructive"> = {
+const statusVariant: Record<
+  FamilyInvite["status"],
+  "default" | "secondary" | "outline" | "destructive"
+> = {
   pending: "default",
   accepted: "secondary",
   revoked: "outline",
@@ -206,7 +214,7 @@ export function FamilySettingsSection() {
           <CardContent>
             {data?.members?.length ? (
               <div className="overflow-x-auto">
-                <Table className="min-w-[520px]">
+                <Table className="min-w-130">
                   <TableHeader>
                     <TableRow className="bg-muted/40">
                       <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -272,7 +280,7 @@ export function FamilySettingsSection() {
           <CardContent>
             {data?.invites?.length ? (
               <div className="overflow-x-auto">
-                <Table className="min-w-[420px]">
+                <Table className="min-w-105">
                   <TableHeader>
                     <TableRow className="bg-muted/40">
                       <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">

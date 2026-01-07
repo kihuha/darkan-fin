@@ -24,7 +24,7 @@ type FamilyInviteFormProps = {
     invite: {
       id: string;
       email: string;
-      status: string;
+      status: "pending" | "accepted" | "revoked" | "expired";
       expires_at: string;
       created_at: string;
     };
