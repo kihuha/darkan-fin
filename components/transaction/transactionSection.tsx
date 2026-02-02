@@ -121,6 +121,36 @@ export const TransactionSection = () => {
     }
   };
 
+  const handleCategoryChange = async (
+    transactionId: string,
+    categoryId: string,
+  ) => {
+    try {
+      const response = await fetch("/api/transaction", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: transactionId,
+          categoryId,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success("Category updated successfully");
+        fetchTransactions();
+      } else {
+        toast.error(result.error || "Failed to update category");
+      }
+    } catch (error) {
+      console.error("Error updating category:", error);
+      toast.error("Failed to update category");
+    }
+  };
+
   const handleSuccess = () => {
     setIsDialogOpen(false);
     setSelectedTransaction(null);
@@ -302,6 +332,7 @@ export const TransactionSection = () => {
           transactions={filteredTransactions}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onCategoryChange={handleCategoryChange}
         />
       )}
 

@@ -334,7 +334,7 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-async function recategorizeTransactions(familyId: number) {
+async function recategorizeTransactions(familyId: string) {
   return db.tx(async (tx) => {
     const categories = await tx.any(
       "SELECT id, name, tags FROM category WHERE family_id = $1",

@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { type Transaction } from "@/lib/validations/transaction";
+import { type Category } from "@/lib/validations/category";
 import {
   Table,
   TableBody,
@@ -19,6 +21,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { format } from "date-fns";
 
 interface TransactionTableProps {
@@ -38,13 +47,56 @@ interface TransactionTableProps {
       category_type: "income" | "expense";
     },
   ) => void;
+  onCategoryChange?: (
+    transactionId: string,
+    categoryId: string,
+  ) => Promise<void>;
 }
 
 export function TransactionTable({
   transactions,
   onEdit,
   onDelete,
+  onCategoryChange,
 }: TransactionTableProps) {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setIsLoadingCategories(true);
+        const response = await fetch("/api/category");
+        const result = await response.json();
+
+        if (result.success) {
+          setCategories(result.data);
+        }
+      } catch (error) {
+        console.error("Error fetching categories:", error);
+      } finally {
+        setIsLoadingCategories(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
+  const handleCategoryChange = async (
+    transactionId: string,
+    categoryId: string,
+  ) => {
+    setUpdatingId(transactionId);
+    try {
+      if (onCategoryChange) {
+        await onCategoryChange(transactionId, categoryId);
+      }
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   return (
     <div className=" border border-white/60 bg-white/70 shadow-sm backdrop-blur">
       <div className="overflow-x-auto">
@@ -83,7 +135,31 @@ export function TransactionTable({
                     "MMM dd, yyyy",
                   )}
                 </TableCell>
-                <TableCell>{transaction.category_name}</TableCell>
+                <TableCell>
+                  <Select
+                    value={transaction.categoryId || ""}
+                    onValueChange={(categoryId) =>
+                      handleCategoryChange(transaction.id!, categoryId)
+                    }
+                    disabled={
+                      updatingId === transaction.id || isLoadingCategories
+                    }
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem
+                          key={category.id}
+                          value={category.id!.toString()}
+                        >
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
                 <TableCell>
                   <Badge
                     variant={
@@ -112,7 +188,7 @@ export function TransactionTable({
                     })}
                   </span>
                 </TableCell>
-                <TableCell className="text-muted-foreground max-w-xs truncate">
+                <TableCell className="text-muted-foreground max-w-xs wrap-break-word whitespace-normal">
                   {transaction.description || "—"}
                 </TableCell>
                 <TableCell className="text-right">
