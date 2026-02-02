@@ -20,7 +20,10 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -149,14 +152,37 @@ export function TransactionForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem
-                      key={category.id}
-                      value={category.id!.toString()}
-                    >
-                      {category.name} ({category.type})
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    <SelectLabel>Income</SelectLabel>
+                    <SelectSeparator />
+                    {categories
+                      .filter((category) => category.type === "income")
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((category) => (
+                        <SelectItem
+                          key={category.id}
+                          value={category.id!.toString()}
+                        >
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
+
+                  <SelectGroup>
+                    <SelectLabel>Expense</SelectLabel>
+                    <SelectSeparator />
+                    {categories
+                      .filter((category) => category.type === "expense")
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((category) => (
+                        <SelectItem
+                          key={category.id}
+                          value={category.id!.toString()}
+                        >
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
               <FormDescription>

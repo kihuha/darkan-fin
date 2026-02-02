@@ -32,6 +32,13 @@ import {
   EmptyContent,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,7 +49,7 @@ type TransactionWithCategory = Transaction & {
 
 export const TransactionSection = () => {
   const [transactions, setTransactions] = useState<TransactionWithCategory[]>(
-    []
+    [],
   );
   const [isLoading, setIsLoading] = useState(true);
   const [isRecategorizing, setIsRecategorizing] = useState(false);
@@ -51,6 +58,9 @@ export const TransactionSection = () => {
     useState<TransactionWithCategory | null>(null);
   const [transactionToDelete, setTransactionToDelete] =
     useState<TransactionWithCategory | null>(null);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<
+    string | null
+  >(null);
 
   const fetchTransactions = async () => {
     try {
@@ -92,7 +102,7 @@ export const TransactionSection = () => {
         `/api/transaction?id=${transactionToDelete.id}`,
         {
           method: "DELETE",
-        }
+        },
       );
 
       const result = await response.json();
@@ -134,7 +144,7 @@ export const TransactionSection = () => {
       toast.success(
         `Recategorized ${updated ?? 0} transactions${
           scanned ? ` (scanned ${scanned})` : ""
-        }.`
+        }.`,
       );
       fetchTransactions();
     } catch (error) {
@@ -151,6 +161,17 @@ export const TransactionSection = () => {
       setSelectedTransaction(null);
     }
   };
+
+  // Get unique categories from transactions
+  const uniqueCategories = Array.from(
+    new Set(transactions.map((t) => t.category_name)),
+  ).sort();
+
+  // Filter transactions based on selected category
+  const filteredTransactions =
+    selectedCategoryFilter === null
+      ? transactions
+      : transactions.filter((t) => t.category_name === selectedCategoryFilter);
 
   if (isLoading) {
     return (
@@ -181,6 +202,24 @@ export const TransactionSection = () => {
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <Select
+            value={selectedCategoryFilter || "all"}
+            onValueChange={(value) =>
+              setSelectedCategoryFilter(value === "all" ? null : value)
+            }
+          >
+            <SelectTrigger className="w-full sm:w-auto">
+              <SelectValue placeholder="Filter by category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {uniqueCategories.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {category}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             variant="outline"
             onClick={handleRecategorize}
@@ -249,9 +288,18 @@ export const TransactionSection = () => {
             </div>
           </EmptyContent>
         </Empty>
+      ) : filteredTransactions.length === 0 ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyTitle>No transactions in this category</EmptyTitle>
+            <EmptyDescription>
+              Try selecting a different category or add a new transaction
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
         <TransactionTable
-          transactions={transactions}
+          transactions={filteredTransactions}
           onEdit={handleEdit}
           onDelete={handleDelete}
         />

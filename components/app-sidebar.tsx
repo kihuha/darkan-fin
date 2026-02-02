@@ -63,11 +63,11 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="rounded-2xl border border-sidebar-border bg-white/80 p-3 shadow-sm backdrop-blur">
+        <div className="rounded-2xl px-4">
           <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
             Darkan Fin
           </p>
-          <p className="mt-1 text-sm font-medium text-sidebar-foreground">
+          <p className="mt-1 text-xs font-medium text-sidebar-foreground">
             Your finance hub
           </p>
         </div>
