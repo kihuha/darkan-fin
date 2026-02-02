@@ -3,11 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
-import {
-  createTransactionSchema,
-  type CreateTransaction,
-  type Transaction,
-} from "@/lib/validations/transaction";
+import { Transaction } from "@/lib/validations/transaction";
 import { type Category } from "@/lib/validations/category";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import z from "zod";
 
 interface TransactionFormProps {
   transaction?: Transaction | null;
@@ -47,11 +44,24 @@ export function TransactionForm({
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
 
-  const form = useForm<CreateTransaction>({
-    resolver: zodResolver(createTransactionSchema),
+  const formSchema = z.object({
+    categoryId: z.string().min(1, "Category is required"),
+    amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
+      message: "Amount must be a positive number",
+    }),
+    transactionDate: z.string().min(1, "Transaction date is required"),
+    description: z
+      .string()
+      .max(1000, "Description must be less than 1000 characters")
+      .optional()
+      .nullable(),
+  });
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       categoryId: transaction?.categoryId || "",
-      amount: transaction?.amount || undefined,
+      amount: transaction?.amount?.toString() || "",
       transactionDate: transaction?.transactionDate
         ? format(new Date(transaction.transactionDate), "yyyy-MM-dd")
         : format(new Date(), "yyyy-MM-dd"),
@@ -82,11 +92,14 @@ export function TransactionForm({
     fetchCategories();
   }, []);
 
-  const onSubmit = async (data: CreateTransaction) => {
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    console.log("Form data:", data);
     try {
       const url = "/api/transaction";
       const method = isEditing ? "PATCH" : "POST";
-      const payload = isEditing ? { ...data, id: transaction.id } : data;
+      const payload = isEditing
+        ? { ...data, id: transaction!.id, amount: parseFloat(data.amount) }
+        : { ...data, amount: parseFloat(data.amount) };
 
       const response = await fetch(url, {
         method,
@@ -106,7 +119,7 @@ export function TransactionForm({
       toast.success(
         isEditing
           ? "Transaction updated successfully"
-          : "Transaction created successfully"
+          : "Transaction created successfully",
       );
       form.reset();
       onSuccess?.();
@@ -167,15 +180,11 @@ export function TransactionForm({
                   min="0"
                   placeholder="0.00"
                   {...field}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    field.onChange(value ? parseFloat(value) : undefined);
-                  }}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  value={field.value ?? ""}
                 />
               </FormControl>
-              <FormDescription>
-                Enter the transaction amount
-              </FormDescription>
+              <FormDescription>Enter the transaction amount</FormDescription>
               <FormMessage />
             </FormItem>
           )}

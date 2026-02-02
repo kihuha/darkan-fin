@@ -2,12 +2,8 @@
 
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
-import {
-  createCategorySchema,
-  type CreateCategory,
-  type Category,
-} from "@/lib/validations/category";
+import { useEffect, useState } from "react";
+import { type Category } from "@/lib/validations/category";
 import { parseTagsInput } from "@/lib/category-recategorization";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, X } from "lucide-react";
+import z from "zod";
 
 interface CategoryFormProps {
   category?: Category | null;
@@ -38,19 +36,40 @@ interface CategoryFormProps {
   onCancel?: () => void;
 }
 
+const formSchema = z.object({
+  id: z.string().optional(),
+  name: z
+    .string()
+    .min(1, "Category name is required")
+    .max(100, "Category name must be less than 100 characters"),
+  type: z.enum(["income", "expense"]),
+  amount: z
+    .string({ error: "Amount must be a number" })
+    .min(0, "Amount must be positive")
+    .optional(),
+  repeats: z.boolean(),
+  description: z
+    .string()
+    .max(500, "Description must be less than 500 characters")
+    .optional()
+    .nullable(),
+  tags: z.array(z.string().min(1).max(50)).optional(),
+});
+
 export function CategoryForm({
   category,
   onSuccess,
   onCancel,
 }: CategoryFormProps) {
   const isEditing = !!category?.id;
+  const [tagInput, setTagInput] = useState("");
 
-  const form = useForm<CreateCategory>({
-    resolver: zodResolver(createCategorySchema),
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       name: category?.name || "",
       type: category?.type || "expense",
-      amount: category?.amount || undefined,
+      amount: category?.amount?.toString() || undefined,
       repeats: category?.repeats || false,
       description: category?.description || "",
       tags: category?.tags || [],
@@ -69,11 +88,50 @@ export function CategoryForm({
     }
   }, [repeatsValue, form]);
 
-  const onSubmit = async (data: CreateCategory) => {
+  const addTags = (rawValue: string) => {
+    const newTags = parseTagsInput(rawValue);
+    if (newTags.length === 0) {
+      return;
+    }
+
+    const existingTags = form.getValues("tags") ?? [];
+    const mergedTags = Array.from(new Set([...existingTags, ...newTags]));
+
+    form.setValue("tags", mergedTags, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    setTagInput("");
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    const existingTags = form.getValues("tags") ?? [];
+    const updatedTags = existingTags.filter((tag) => tag !== tagToRemove);
+
+    form.setValue("tags", updatedTags, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+  };
+
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
       const url = "/api/category";
       const method = isEditing ? "PATCH" : "POST";
-      const payload = isEditing ? { ...data, id: category.id } : data;
+      const payload = isEditing
+        ? {
+            ...data,
+            id: category!.id,
+            amount: data.amount
+              ? parseFloat(data.amount as unknown as string)
+              : undefined,
+          }
+        : {
+            ...data,
+            amount: data.amount
+              ? parseFloat(data.amount as unknown as string)
+              : undefined,
+          };
 
       const response = await fetch(url, {
         method,
@@ -93,7 +151,7 @@ export function CategoryForm({
       toast.success(
         isEditing
           ? "Category updated successfully"
-          : "Category created successfully"
+          : "Category created successfully",
       );
       form.reset();
       onSuccess?.();
@@ -184,13 +242,7 @@ export function CategoryForm({
                     placeholder="0.00"
                     {...field}
                     value={field.value ?? ""}
-                    onChange={(e) =>
-                      field.onChange(
-                        e.target.value === ""
-                          ? undefined
-                          : parseFloat(e.target.value) || 0
-                      )
-                    }
+                    onChange={(e) => field.onChange(e.target.value)}
                   />
                 </FormControl>
                 <FormDescription>
@@ -231,16 +283,46 @@ export function CategoryForm({
             <FormItem>
               <FormLabel>Tags</FormLabel>
               <FormControl>
-                <Input
-                  placeholder="e.g., coffee, uber, rent"
-                  value={field.value?.join(", ") || ""}
-                  onChange={(event) =>
-                    field.onChange(parseTagsInput(event.target.value))
-                  }
-                />
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {(field.value ?? []).map((tag) => (
+                      <Badge key={tag} variant="secondary" className="gap-1">
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => removeTag(tag)}
+                          className="ml-1 rounded-full hover:bg-muted/60"
+                          aria-label={`Remove ${tag}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Type a tag and press Enter"
+                      value={tagInput}
+                      onChange={(event) => setTagInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addTags(tagInput);
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => addTags(tagInput)}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                </div>
               </FormControl>
               <FormDescription>
-                Comma-separated tags used for auto-categorization
+                Separate tags with commas, semicolons, or new lines
               </FormDescription>
               <FormMessage />
             </FormItem>

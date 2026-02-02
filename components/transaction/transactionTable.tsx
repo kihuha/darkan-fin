@@ -30,13 +30,13 @@ interface TransactionTableProps {
     transaction: Transaction & {
       category_name: string;
       category_type: "income" | "expense";
-    }
+    },
   ) => void;
   onDelete: (
     transaction: Transaction & {
       category_name: string;
       category_type: "income" | "expense";
-    }
+    },
   ) => void;
 }
 
@@ -80,7 +80,7 @@ export function TransactionTable({
                 <TableCell className="font-medium whitespace-nowrap">
                   {format(
                     new Date(transaction.transactionDate),
-                    "MMM dd, yyyy"
+                    "MMM dd, yyyy",
                   )}
                 </TableCell>
                 <TableCell>{transaction.category_name}</TableCell>
@@ -112,7 +112,7 @@ export function TransactionTable({
                     })}
                   </span>
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-muted-foreground max-w-xs truncate">
                   {transaction.description || "—"}
                 </TableCell>
                 <TableCell className="text-right">

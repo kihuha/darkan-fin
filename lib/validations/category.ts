@@ -7,7 +7,10 @@ export const categorySchema = z.object({
     .min(1, "Category name is required")
     .max(100, "Category name must be less than 100 characters"),
   type: z.enum(["income", "expense"]),
-  amount: z.number().min(0, "Amount must be positive").optional(),
+  amount: z
+    .number({ error: "Amount must be a number" })
+    .min(0, "Amount must be positive")
+    .optional(),
   repeats: z.boolean(),
   description: z
     .string()
@@ -27,7 +30,7 @@ export const createCategorySchema = categorySchema.omit({ id: true }).refine(
   {
     message: "Amount is required for recurring categories",
     path: ["amount"],
-  }
+  },
 );
 export const updateCategorySchema = categorySchema
   .partial()

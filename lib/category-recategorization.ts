@@ -5,7 +5,7 @@ export type CategoryTagEntry = {
 
 export function parseTagsInput(value: string) {
   return value
-    .split(",")
+    .split(/[,;\n]+/)
     .map((tag) => tag.trim())
     .filter(Boolean);
 }
