@@ -10,9 +10,11 @@ import { ApiError, requireFamilyContext } from "@/utils/auth-helpers";
 export async function GET(request: NextRequest) {
   try {
     const { familyId } = await requireFamilyContext(request.headers);
+    const { searchParams } = new URL(request.url);
+    const month = searchParams.get("month");
+    const year = searchParams.get("year");
 
-    const transactions = await db.any(
-      `
+    let query = `
       SELECT 
         t.id, 
         t.category_id as "categoryId", 
@@ -26,27 +28,41 @@ export async function GET(request: NextRequest) {
         c.type as category_type
       FROM transaction t
       JOIN category c ON t.category_id = c.id
-      WHERE t.family_id = $1 AND c.family_id = $1
-      ORDER BY t.transaction_date DESC, t.created_at DESC
-    `,
-      [familyId]
-    );
+      WHERE t.family_id = $1 AND c.family_id = $1`;
+
+    const params: any[] = [familyId];
+
+    // Add month/year filtering if provided
+    if (month && year) {
+      const monthNum = parseInt(month);
+      const yearNum = parseInt(year);
+
+      if (monthNum >= 1 && monthNum <= 12 && yearNum >= 2000) {
+        query += ` AND EXTRACT(MONTH FROM t.transaction_date) = $${params.length + 1}`;
+        query += ` AND EXTRACT(YEAR FROM t.transaction_date) = $${params.length + 2}`;
+        params.push(monthNum, yearNum);
+      }
+    }
+
+    query += ` ORDER BY t.transaction_date DESC, t.created_at DESC`;
+
+    const transactions = await db.any(query, params);
 
     return NextResponse.json(
       { success: true, data: transactions },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Error fetching transactions:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch transactions" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -68,7 +84,7 @@ export async function POST(request: NextRequest) {
           error: "Validation failed",
           details: validationResult.error.issues,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -78,13 +94,13 @@ export async function POST(request: NextRequest) {
     // Verify category exists
     const category = await db.oneOrNone(
       "SELECT id FROM category WHERE id = $1 AND family_id = $2",
-      [categoryId, familyId]
+      [categoryId, familyId],
     );
 
     if (!category) {
       return NextResponse.json(
         { success: false, error: "Category not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -100,24 +116,24 @@ export async function POST(request: NextRequest) {
         transactionDate,
         description || null,
         familyId,
-      ]
+      ],
     );
 
     return NextResponse.json(
       { success: true, data: newTransaction },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Error creating transaction:", error);
     return NextResponse.json(
       { success: false, error: "Failed to create transaction" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -139,7 +155,7 @@ export async function PATCH(request: NextRequest) {
           error: "Validation failed",
           details: validationResult.error.issues,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -149,13 +165,13 @@ export async function PATCH(request: NextRequest) {
     // Check if transaction exists in the family
     const existing = await db.oneOrNone(
       "SELECT id FROM transaction WHERE id = $1 AND family_id = $2",
-      [id, familyId]
+      [id, familyId],
     );
 
     if (!existing) {
       return NextResponse.json(
         { success: false, error: "Transaction not found or access denied" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -163,13 +179,13 @@ export async function PATCH(request: NextRequest) {
     if (categoryId) {
       const category = await db.oneOrNone(
         "SELECT id FROM category WHERE id = $1 AND family_id = $2",
-        [categoryId, familyId]
+        [categoryId, familyId],
       );
 
       if (!category) {
         return NextResponse.json(
           { success: false, error: "Category not found" },
-          { status: 404 }
+          { status: 404 },
         );
       }
     }
@@ -221,19 +237,19 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json(
       { success: true, data: updatedTransaction },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Error updating transaction:", error);
     return NextResponse.json(
       { success: false, error: "Failed to update transaction" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -249,20 +265,20 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json(
         { success: false, error: "Transaction ID is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Check if transaction exists in the family
     const existing = await db.oneOrNone(
       "SELECT id FROM transaction WHERE id = $1 AND family_id = $2",
-      [id, familyId]
+      [id, familyId],
     );
 
     if (!existing) {
       return NextResponse.json(
         { success: false, error: "Transaction not found or access denied" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -273,19 +289,19 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json(
       { success: true, message: "Transaction deleted successfully" },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Error deleting transaction:", error);
     return NextResponse.json(
       { success: false, error: "Failed to delete transaction" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
