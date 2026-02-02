@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,6 +23,23 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Transaction } from "@/lib/validations/transaction";
+
+type TransactionWithCategory = Transaction & {
+  category_name: string;
+  category_type: "income" | "expense";
+};
+
+type BudgetCategory = {
+  category_id: string;
+  category_name: string;
+  category_type: "income" | "expense";
+  category_amount: number | null;
+  repeats: boolean;
+  amount: number;
+  budget_item_id?: string;
+};
 
 type BudgetOverview = {
   categoryId: string;
@@ -65,11 +82,7 @@ export default function DashboardPage() {
     (_, i) => currentDate.getFullYear() - i,
   );
 
-  useEffect(() => {
-    fetchBudgetOverview();
-  }, [selectedMonth, selectedYear]);
-
-  const fetchBudgetOverview = async () => {
+  const fetchBudgetOverview = useCallback(async () => {
     try {
       setIsLoading(true);
 
@@ -100,12 +113,12 @@ export default function DashboardPage() {
         return;
       }
 
-      const transactions = transactionResult.data;
+      const transactions: TransactionWithCategory[] = transactionResult.data;
 
       // Calculate spending per category
       const spendingByCategory = transactions
-        .filter((t: any) => t.category_type === "expense")
-        .reduce((acc: Record<string, number>, transaction: any) => {
+        .filter((t) => t.category_type === "expense")
+        .reduce((acc: Record<string, number>, transaction) => {
           const categoryId = transaction.categoryId;
           acc[categoryId] = (acc[categoryId] || 0) + Number(transaction.amount);
           return acc;
@@ -114,9 +127,10 @@ export default function DashboardPage() {
       // Build overview data (only for expense categories with budgets)
       const overview: BudgetOverview[] = budgetCategories
         .filter(
-          (item: any) => item.category_type === "expense" && item.amount > 0,
+          (item: BudgetCategory) =>
+            item.category_type === "expense" && item.amount > 0,
         )
-        .map((item: any) => {
+        .map((item: BudgetCategory) => {
           const spentAmount = spendingByCategory[item.category_id] || 0;
           const budgetAmount = Number(item.amount);
           const percentage =
@@ -131,7 +145,7 @@ export default function DashboardPage() {
             isOverBudget: spentAmount > budgetAmount,
           };
         })
-        .sort((a, b) => {
+        .sort((a: BudgetOverview, b: BudgetOverview) => {
           // Sort overbudget items to top
           if (a.isOverBudget && !b.isOverBudget) return -1;
           if (!a.isOverBudget && b.isOverBudget) return 1;
@@ -150,10 +164,12 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedMonth, selectedYear]);
 
-  const overallPercentage =
-    totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+  useEffect(() => {
+    fetchBudgetOverview();
+  }, [fetchBudgetOverview, selectedMonth, selectedYear]);
+
   const isOverallOverBudget = totalSpent > totalBudget;
 
   return (
@@ -349,8 +365,7 @@ export default function DashboardPage() {
                           <div className="flex items-center gap-2">
                             <Progress
                               value={Math.min(item.percentage, 100)}
-                              className="h-2"
-                              indicatorClassName={progressColor}
+                              className={cn("h-2", progressColor)}
                             />
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {item.percentage.toFixed(0)}%
