@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     uploadFormData.append("file", file, file.name || "statement.pdf");
 
     const uploadResponse = await fetch(
-      "http://127.0.0.1:8000/statements/upload-pdf",
+      `${process.env.API_BASE_URL}/statements/upload-pdf`,
       {
         method: "POST",
         headers: {
