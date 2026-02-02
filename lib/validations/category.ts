@@ -14,6 +14,7 @@ export const categorySchema = z.object({
     .max(500, "Description must be less than 500 characters")
     .optional()
     .nullable(),
+  tags: z.array(z.string().min(1).max(50)).optional(),
 });
 
 export const createCategorySchema = categorySchema.omit({ id: true }).refine(

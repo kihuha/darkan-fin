@@ -8,6 +8,7 @@ import {
   type CreateCategory,
   type Category,
 } from "@/lib/validations/category";
+import { parseTagsInput } from "@/lib/category-recategorization";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -52,6 +53,7 @@ export function CategoryForm({
       amount: category?.amount || undefined,
       repeats: category?.repeats || false,
       description: category?.description || "",
+      tags: category?.tags || [],
     },
   });
 
@@ -216,6 +218,29 @@ export function CategoryForm({
               </FormControl>
               <FormDescription>
                 A brief description of what this category is for
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="tags"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Tags</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="e.g., coffee, uber, rent"
+                  value={field.value?.join(", ") || ""}
+                  onChange={(event) =>
+                    field.onChange(parseTagsInput(event.target.value))
+                  }
+                />
+              </FormControl>
+              <FormDescription>
+                Comma-separated tags used for auto-categorization
               </FormDescription>
               <FormMessage />
             </FormItem>

@@ -5,6 +5,7 @@ import {
   updateCategorySchema,
 } from "@/lib/validations/category";
 import { ApiError, requireFamilyContext } from "@/utils/auth-helpers";
+import { findCategoryIdByTags } from "@/lib/category-recategorization";
 
 // GET - Fetch all categories
 export async function GET(request: NextRequest) {
@@ -13,29 +14,29 @@ export async function GET(request: NextRequest) {
 
     const categories = await db.any(
       `
-        SELECT id, name, type, amount, repeats, description, created_at, updated_at
+        SELECT id, name, type, amount, repeats, description, tags, created_at, updated_at
         FROM category
         WHERE family_id = $1
         ORDER BY name ASC
       `,
-      [familyId]
+      [familyId],
     );
 
     return NextResponse.json(
       { success: true, data: categories },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Error fetching categories:", error);
     return NextResponse.json(
       { success: false, error: "Failed to fetch categories" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -44,6 +45,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const { familyId } = await requireFamilyContext(request.headers);
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get("action");
+
+    if (action === "recategorize") {
+      const result = await recategorizeTransactions(familyId);
+      return NextResponse.json(
+        { success: true, data: result },
+        { status: 200 },
+      );
+    }
+
     const body = await request.json();
 
     // Validate request body
@@ -56,48 +68,57 @@ export async function POST(request: NextRequest) {
           error: "Validation failed",
           details: validationResult.error.issues,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const { name, type, amount, repeats, description } = validationResult.data;
+    const { name, type, amount, repeats, description, tags } =
+      validationResult.data;
 
     // Check if category with same name already exists
     const existing = await db.oneOrNone(
       "SELECT id FROM category WHERE family_id = $1 AND LOWER(name) = LOWER($2)",
-      [familyId, name]
+      [familyId, name],
     );
 
     if (existing) {
       return NextResponse.json(
         { success: false, error: "A category with this name already exists" },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
     // Insert new category
     const newCategory = await db.one(
-      `INSERT INTO category (family_id, name, type, amount, repeats, description)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, type, amount, repeats, description, created_at, updated_at`,
-      [familyId, name, type, amount ?? 0, repeats, description || null]
+      `INSERT INTO category (family_id, name, type, amount, repeats, description, tags)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, type, amount, repeats, description, tags, created_at, updated_at`,
+      [
+        familyId,
+        name,
+        type,
+        amount ?? 0,
+        repeats,
+        description || null,
+        tags ?? [],
+      ],
     );
 
     return NextResponse.json(
       { success: true, data: newCategory },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Error creating category:", error);
     return NextResponse.json(
       { success: false, error: "Failed to create category" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -118,23 +139,23 @@ export async function PATCH(request: NextRequest) {
           error: "Validation failed",
           details: validationResult.error.issues,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const { id, name, type, amount, repeats, description } =
+    const { id, name, type, amount, repeats, description, tags } =
       validationResult.data;
 
     // Check if category exists
     const existing = await db.oneOrNone(
       "SELECT id FROM category WHERE id = $1 AND family_id = $2",
-      [id, familyId]
+      [id, familyId],
     );
 
     if (!existing) {
       return NextResponse.json(
         { success: false, error: "Category not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -146,13 +167,13 @@ export async function PATCH(request: NextRequest) {
          WHERE family_id = $1
            AND LOWER(name) = LOWER($2)
            AND id != $3`,
-        [familyId, name, id]
+        [familyId, name, id],
       );
 
       if (duplicate) {
         return NextResponse.json(
           { success: false, error: "A category with this name already exists" },
-          { status: 409 }
+          { status: 409 },
         );
       }
     }
@@ -182,6 +203,10 @@ export async function PATCH(request: NextRequest) {
       updates.push(`description = $${paramCount++}`);
       values.push(description);
     }
+    if (tags !== undefined) {
+      updates.push(`tags = $${paramCount++}`);
+      values.push(tags);
+    }
 
     updates.push(`updated_at = NOW()`);
     values.push(id, familyId);
@@ -190,26 +215,26 @@ export async function PATCH(request: NextRequest) {
       UPDATE category
       SET ${updates.join(", ")}
       WHERE id = $${paramCount} AND family_id = $${paramCount + 1}
-      RETURNING id, name, type, amount, repeats, description, created_at, updated_at
+      RETURNING id, name, type, amount, repeats, description, tags, created_at, updated_at
     `;
 
     const updatedCategory = await db.one(query, values);
 
     return NextResponse.json(
       { success: true, data: updatedCategory },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Error updating category:", error);
     return NextResponse.json(
       { success: false, error: "Failed to update category" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -224,20 +249,20 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json(
         { success: false, error: "Category ID is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Check if category exists
     const category = await db.oneOrNone(
       "SELECT id, name FROM category WHERE id = $1 AND family_id = $2",
-      [id, familyId]
+      [id, familyId],
     );
 
     if (!category) {
       return NextResponse.json(
         { success: false, error: "Category not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -245,14 +270,14 @@ export async function DELETE(request: NextRequest) {
     if (category.name.toLowerCase() === "uncategorized") {
       return NextResponse.json(
         { success: false, error: "Cannot delete the Uncategorized category" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Get or create Uncategorized category
     let uncategorized = await db.oneOrNone(
       "SELECT id FROM category WHERE family_id = $1 AND LOWER(name) = 'uncategorized'",
-      [familyId]
+      [familyId],
     );
 
     if (!uncategorized) {
@@ -262,39 +287,104 @@ export async function DELETE(request: NextRequest) {
          ON CONFLICT (family_id, LOWER(name))
          DO UPDATE SET updated_at = NOW()
          RETURNING id`,
-        [familyId]
+        [familyId],
       );
     }
 
-    // Move all budget items to Uncategorized category
-    await db.none(
-      `UPDATE budget_item 
-       SET category_id = $1 
-       WHERE category_id = $2 AND family_id = $3`,
-      [uncategorized.id, id, familyId]
-    );
+    await db.tx(async (tx) => {
+      // Move all budget items to Uncategorized category
+      await tx.none(
+        `UPDATE budget_item 
+         SET category_id = $1 
+         WHERE category_id = $2 AND family_id = $3`,
+        [uncategorized.id, id, familyId],
+      );
 
-    // Delete the category
-    await db.none("DELETE FROM category WHERE id = $1 AND family_id = $2", [
-      id,
-      familyId,
-    ]);
+      // Move all transactions to Uncategorized category
+      await tx.none(
+        `UPDATE transaction
+         SET category_id = $1
+         WHERE category_id = $2 AND family_id = $3`,
+        [uncategorized.id, id, familyId],
+      );
+
+      // Delete the category
+      await tx.none("DELETE FROM category WHERE id = $1 AND family_id = $2", [
+        id,
+        familyId,
+      ]);
+    });
 
     return NextResponse.json(
       { success: true, message: "Category deleted successfully" },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: error.status }
+        { status: error.status },
       );
     }
     console.error("Error deleting category:", error);
     return NextResponse.json(
       { success: false, error: "Failed to delete category" },
-      { status: 500 }
+      { status: 500 },
     );
   }
+}
+
+async function recategorizeTransactions(familyId: number) {
+  return db.tx(async (tx) => {
+    const categories = await tx.any(
+      "SELECT id, name, tags FROM category WHERE family_id = $1",
+      [familyId],
+    );
+
+    const uncategorized = categories.find(
+      (category: { name?: string }) =>
+        category.name?.toLowerCase() === "uncategorized",
+    );
+
+    if (!uncategorized?.id) {
+      throw new ApiError(
+        500,
+        "Default Uncategorized category not found. Please run the database seed.",
+      );
+    }
+
+    const matchableCategories = categories.filter(
+      (category: { id: number | string }) => category.id !== uncategorized.id,
+    );
+
+    const transactions = await tx.any(
+      `SELECT id, description
+       FROM transaction
+       WHERE family_id = $1 AND category_id = $2`,
+      [familyId, uncategorized.id],
+    );
+
+    let updated = 0;
+
+    for (const transaction of transactions) {
+      const nextCategoryId = findCategoryIdByTags(
+        transaction.description,
+        matchableCategories,
+        uncategorized.id,
+      );
+
+      if (nextCategoryId !== uncategorized.id) {
+        await tx.none(
+          "UPDATE transaction SET category_id = $1 WHERE id = $2 AND family_id = $3",
+          [nextCategoryId, transaction.id, familyId],
+        );
+        updated += 1;
+      }
+    }
+
+    return {
+      updated,
+      scanned: transactions.length,
+    };
+  });
 }

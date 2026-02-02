@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { type Transaction } from "@/lib/validations/transaction";
 import { TransactionTable } from "./transactionTable";
 import { TransactionForm } from "../forms/transactionForm";
+import { MpesaImportDialog } from "./mpesaImportDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,6 +45,7 @@ export const TransactionSection = () => {
     []
   );
   const [isLoading, setIsLoading] = useState(true);
+  const [isRecategorizing, setIsRecategorizing] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] =
     useState<TransactionWithCategory | null>(null);
@@ -115,6 +117,34 @@ export const TransactionSection = () => {
     fetchTransactions();
   };
 
+  const handleRecategorize = async () => {
+    try {
+      setIsRecategorizing(true);
+      const response = await fetch("/api/category?action=recategorize", {
+        method: "POST",
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        toast.error(result.error || "Failed to recategorize transactions");
+        return;
+      }
+
+      const { updated, scanned } = result.data ?? {};
+      toast.success(
+        `Recategorized ${updated ?? 0} transactions${
+          scanned ? ` (scanned ${scanned})` : ""
+        }.`
+      );
+      fetchTransactions();
+    } catch (error) {
+      console.error("Error recategorizing transactions:", error);
+      toast.error("Failed to recategorize transactions");
+    } finally {
+      setIsRecategorizing(false);
+    }
+  };
+
   const handleDialogChange = (open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
@@ -150,31 +180,48 @@ export const TransactionSection = () => {
             Track all your income and expenses
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
-              <Plus className="mr-2 h-4 w-4" />
-              New Transaction
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-125">
-            <DialogHeader>
-              <DialogTitle>
-                {selectedTransaction ? "Edit Transaction" : "New Transaction"}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedTransaction
-                  ? "Update the details of your transaction"
-                  : "Add a new transaction to track your finances"}
-              </DialogDescription>
-            </DialogHeader>
-            <TransactionForm
-              transaction={selectedTransaction}
-              onSuccess={handleSuccess}
-              onCancel={() => handleDialogChange(false)}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <Button
+            variant="outline"
+            onClick={handleRecategorize}
+            disabled={isRecategorizing}
+            className="w-full sm:w-auto"
+          >
+            {isRecategorizing
+              ? "Recategorizing..."
+              : "Recategorize Transactions"}
+          </Button>
+          <MpesaImportDialog
+            onImported={fetchTransactions}
+            triggerClassName="w-full sm:w-auto"
+            triggerVariant="outline"
+          />
+          <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
+            <DialogTrigger asChild>
+              <Button className="w-full sm:w-auto">
+                <Plus className="mr-2 h-4 w-4" />
+                New Transaction
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-125">
+              <DialogHeader>
+                <DialogTitle>
+                  {selectedTransaction ? "Edit Transaction" : "New Transaction"}
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedTransaction
+                    ? "Update the details of your transaction"
+                    : "Add a new transaction to track your finances"}
+                </DialogDescription>
+              </DialogHeader>
+              <TransactionForm
+                transaction={selectedTransaction}
+                onSuccess={handleSuccess}
+                onCancel={() => handleDialogChange(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {transactions.length === 0 ? (
@@ -186,10 +233,20 @@ export const TransactionSection = () => {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button onClick={() => setIsDialogOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Transaction
-            </Button>
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
+              <MpesaImportDialog
+                onImported={fetchTransactions}
+                triggerClassName="w-full sm:w-auto"
+                triggerVariant="outline"
+              />
+              <Button
+                onClick={() => setIsDialogOpen(true)}
+                className="w-full sm:w-auto"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Transaction
+              </Button>
+            </div>
           </EmptyContent>
         </Empty>
       ) : (
