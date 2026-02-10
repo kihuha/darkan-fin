@@ -24,10 +24,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
 import { cn, MONTHS } from "@/lib/utils";
-import { Transaction } from "@/lib/validations/transaction";
 import { Header } from "@/components/header";
 
-type TransactionWithCategory = Transaction & {
+type TransactionWithCategory = {
+  id: number;
+  amount: number;
+  description: string;
+  transaction_date: string;
+  category_id: number;
+  family_id: number;
   category_name: string;
   category_type: "income" | "expense";
 };
@@ -109,7 +114,7 @@ export default function DashboardPage() {
       const spendingByCategory = transactions
         .filter((t) => t.category_type === "expense")
         .reduce((acc: Record<string, number>, transaction) => {
-          const categoryId = transaction.categoryId;
+          const categoryId = transaction.category_id;
           acc[categoryId] = (acc[categoryId] || 0) + Number(transaction.amount);
           return acc;
         }, {});

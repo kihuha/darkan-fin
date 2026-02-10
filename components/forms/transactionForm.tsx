@@ -3,7 +3,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
-import { Transaction } from "@/lib/validations/transaction";
 import { type Category } from "@/lib/validations/category";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +32,14 @@ import { format } from "date-fns";
 import z from "zod";
 
 interface TransactionFormProps {
-  transaction?: Transaction | null;
+  transaction?: {
+    id: number;
+    amount: number;
+    description: string;
+    transaction_date: string;
+    category_id: number;
+    family_id: number;
+  } | null;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -63,10 +69,10 @@ export function TransactionForm({
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      categoryId: transaction?.categoryId || "",
+      categoryId: transaction?.category_id?.toString() || "",
       amount: transaction?.amount?.toString() || "",
-      transactionDate: transaction?.transactionDate
-        ? format(new Date(transaction.transactionDate), "yyyy-MM-dd")
+      transactionDate: transaction?.transaction_date
+        ? format(new Date(transaction.transaction_date), "yyyy-MM-dd")
         : format(new Date(), "yyyy-MM-dd"),
       description: transaction?.description || "",
     },

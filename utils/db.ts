@@ -1,6 +1,6 @@
-import pgPromise from "pg-promise";
+import pgPromise, { type IDatabase, type IMain } from "pg-promise";
 
-const pgp = pgPromise({});
+const pgp: IMain = pgPromise({});
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -8,12 +8,15 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is not set");
 }
 
-// Use a global to check if instance already exists
-let db = (global as any).db;
+declare global {
+  var db: IDatabase<unknown> | undefined;
+}
 
-if (!db) {
-  db = pgp(connectionString);
-  (global as any).db = db;
+const globalDb = global.db;
+const db: IDatabase<unknown> = globalDb ?? pgp(connectionString);
+
+if (!globalDb) {
+  global.db = db;
   console.log("Created new database instance");
 } else {
   console.log("Using existing database instance");
