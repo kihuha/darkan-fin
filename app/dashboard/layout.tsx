@@ -19,7 +19,7 @@ export default async function DashboardLayout({
 
   return (
     <main>
-      <ContentWrapper>{children}</ContentWrapper>
+      <ContentWrapper user={session.user}>{children}</ContentWrapper>
     </main>
   );
 }
