@@ -137,3 +137,73 @@ FROM family f
 ON CONFLICT (family_id, LOWER(name)) DO NOTHING;
 
 COMMIT;
+
+BEGIN;
+
+-- Get or create the default family
+DO $$
+DECLARE
+	default_family_id BIGINT;
+BEGIN
+	-- Get the first family (should be 'Default Family' from migration)
+	SELECT id INTO default_family_id
+	FROM family
+	ORDER BY id ASC
+	LIMIT 1;
+
+	-- If no family exists, create one
+	IF default_family_id IS NULL THEN
+		INSERT INTO family (name)
+		VALUES ('Njihia''s Family')
+		RETURNING id INTO default_family_id;
+	END IF;
+
+	-- Seed income categories
+	INSERT INTO category (family_id, name, type, amount, repeats, description)
+	VALUES
+		(default_family_id, 'Darius'' Salary', 'income', 0, FALSE, NULL),
+		(default_family_id, 'Winnie Salary', 'income', 0, FALSE, NULL),
+		(default_family_id, 'Rongai Rent', 'income', 0, FALSE, NULL)
+	ON CONFLICT (family_id, LOWER(name)) DO NOTHING;
+
+	-- Seed expense categories
+	INSERT INTO category (family_id, name, type, amount, repeats, description)
+	VALUES
+		(default_family_id, 'Food and Hosting', 'expense', 25000, TRUE, NULL),
+		(default_family_id, 'Rent', 'expense', 30000, TRUE, NULL),
+		(default_family_id, 'Electricity', 'expense', 2500, TRUE, NULL),
+		(default_family_id, 'Water', 'expense', 1500, TRUE, NULL),
+		(default_family_id, 'Internet', 'expense', 4100, TRUE, NULL),
+		(default_family_id, 'Transport', 'expense', 0, FALSE, NULL),
+		(default_family_id, 'Streaming', 'expense', 1100, TRUE, NULL),
+		(default_family_id, 'Education', 'expense', 0, FALSE, NULL)
+	ON CONFLICT (family_id, LOWER(name)) DO NOTHING;
+END $$;
+
+COMMIT;
+
+BEGIN;
+
+-- Family-scoped budget queries by month/year
+CREATE INDEX IF NOT EXISTS idx_budget_family_year_month
+	ON budget (family_id, year, month);
+
+-- Keep only one active invite per family/email pair.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_family_invite_pending_email
+	ON family_invite (family_id, LOWER(email))
+	WHERE status = 'pending';
+
+-- Existing checklist indexes (kept idempotent).
+CREATE INDEX IF NOT EXISTS idx_transaction_family_date
+	ON transaction (family_id, transaction_date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_family_category
+	ON transaction (family_id, category_id);
+
+CREATE INDEX IF NOT EXISTS idx_category_family_id
+	ON category (family_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_family_member_family_user
+	ON family_member (family_id, user_id);
+
+COMMIT;
