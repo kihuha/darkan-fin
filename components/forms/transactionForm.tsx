@@ -54,11 +54,11 @@ export function TransactionForm({
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
 
   const formSchema = z.object({
-    categoryId: z.string().min(1, "Category is required"),
+    category_id: z.string().min(1, "Category is required"),
     amount: z.string().refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
       message: "Amount must be a positive number",
     }),
-    transactionDate: z.string().min(1, "Transaction date is required"),
+    transaction_date: z.string().min(1, "Transaction date is required"),
     description: z
       .string()
       .max(1000, "Description must be less than 1000 characters")
@@ -69,9 +69,9 @@ export function TransactionForm({
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      categoryId: transaction?.category_id?.toString() || "",
+      category_id: transaction?.category_id?.toString() || "",
       amount: transaction?.amount?.toString() || "",
-      transactionDate: transaction?.transaction_date
+      transaction_date: transaction?.transaction_date
         ? format(new Date(transaction.transaction_date), "yyyy-MM-dd")
         : format(new Date(), "yyyy-MM-dd"),
       description: transaction?.description || "",
@@ -102,7 +102,6 @@ export function TransactionForm({
   }, []);
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    console.log("Form data:", data);
     try {
       const url = "/api/transaction";
       const method = isEditing ? "PATCH" : "POST";
@@ -143,7 +142,7 @@ export function TransactionForm({
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name="categoryId"
+          name="category_id"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Category</FormLabel>
@@ -224,7 +223,7 @@ export function TransactionForm({
 
         <FormField
           control={form.control}
-          name="transactionDate"
+          name="transaction_date"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Date</FormLabel>

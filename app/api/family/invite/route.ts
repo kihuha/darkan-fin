@@ -1,132 +1,130 @@
-import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import db from "@/utils/db";
-import { ApiError, assertAdmin, requireFamilyContext } from "@/utils/auth-helpers";
-import { familyInviteSchema } from "@/lib/validations/family";
+import { family_invite_schema } from "@/lib/validations/family";
+import { jsonSuccess } from "@/utils/api-response";
+import { ApiError } from "@/utils/errors";
+import { withRouteContext } from "@/utils/route";
+import { requireEnv } from "@/utils/server/env";
+import { logInfo } from "@/utils/server/logger";
 
 const INVITE_EXPIRY_DAYS = 7;
 
-function buildInviteLink(token: string) {
-  const appUrl = process.env.APP_URL;
-
-  if (!appUrl) {
-    throw new ApiError(500, "APP_URL is not configured");
-  }
-
-  return `${appUrl.replace(/\/$/, "")}/invite/accept?token=${encodeURIComponent(
-    token
-  )}`;
-}
-
 function hashToken(token: string) {
-  const pepper = process.env.INVITE_TOKEN_PEPPER;
+  const invite_token_pepper = requireEnv("INVITE_TOKEN_PEPPER");
 
-  if (!pepper) {
-    throw new ApiError(500, "INVITE_TOKEN_PEPPER is not configured");
-  }
-
-  return crypto.createHash("sha256").update(`${token}${pepper}`).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(`${token}${invite_token_pepper}`)
+    .digest("hex");
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const context = await requireFamilyContext(request.headers);
-    assertAdmin(context);
+function buildInviteLink(token: string) {
+  const app_url = requireEnv("APP_URL");
+  return `${app_url.replace(/\/$/, "")}/invite/accept?token=${encodeURIComponent(token)}`;
+}
 
-    const body = await request.json();
-    const validationResult = familyInviteSchema.safeParse(body);
+export const POST = withRouteContext(
+  async ({ request, request_id, family, user }) => {
+    if (!family || !user) {
+      throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
+    }
 
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Validation failed",
-          details: validationResult.error.issues,
-        },
-        { status: 400 }
+    const parsed_body = family_invite_schema.safeParse(await request.json());
+
+    if (!parsed_body.success) {
+      throw new ApiError(
+        400,
+        "VALIDATION_ERROR",
+        "Validation failed",
+        parsed_body.error.issues,
       );
     }
 
-    const email = validationResult.data.email.toLowerCase();
+    const email = parsed_body.data.email;
 
-    const member = await db.oneOrNone(
+    const member = await db.oneOrNone<{ id: string }>(
       `SELECT fm.id
        FROM family_member fm
        JOIN "user" u ON u.id = fm.user_id
-       WHERE fm.family_id = $1 AND LOWER(u.email) = $2`,
-      [context.familyId, email]
+       WHERE fm.family_id = $1
+         AND LOWER(u.email) = $2`,
+      [family.family_id, email],
     );
 
     if (member) {
-      return NextResponse.json(
-        { success: false, error: "This email is already in your family" },
-        { status: 409 }
-      );
+      throw new ApiError(409, "CONFLICT", "This email is already in your family");
     }
 
     await db.none(
       `UPDATE family_invite
-       SET status = 'expired', updated_at = NOW()
+       SET status = 'expired',
+           updated_at = NOW()
        WHERE family_id = $1
          AND LOWER(email) = $2
          AND status = 'pending'
          AND expires_at <= NOW()`,
-      [context.familyId, email]
+      [family.family_id, email],
     );
 
-    const pendingInvite = await db.oneOrNone(
+    const pending_invite = await db.oneOrNone<{ id: string }>(
       `SELECT id
        FROM family_invite
        WHERE family_id = $1
          AND LOWER(email) = $2
          AND status = 'pending'
          AND expires_at > NOW()`,
-      [context.familyId, email]
+      [family.family_id, email],
     );
 
-    if (pendingInvite) {
-      return NextResponse.json(
-        { success: false, error: "An invite is already pending for this email" },
-        { status: 409 }
+    if (pending_invite) {
+      throw new ApiError(
+        409,
+        "CONFLICT",
+        "An invite is already pending for this email",
       );
     }
 
     const token = crypto.randomBytes(32).toString("base64url");
-    const tokenHash = hashToken(token);
-    const expiresAt = new Date(
-      Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000
+    const token_hash = hashToken(token);
+    const expires_at = new Date(
+      Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     );
 
-    const invite = await db.one(
+    const invite = await db.one<{
+      id: string;
+      email: string;
+      status: "pending" | "accepted" | "revoked" | "expired";
+      expires_at: string;
+      created_at: string;
+    }>(
       `INSERT INTO family_invite (family_id, email, token_hash, invited_by_user_id, expires_at)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, email, status, expires_at, created_at`,
-      [context.familyId, email, tokenHash, context.userId, expiresAt]
+      [family.family_id, email, token_hash, user.user_id, expires_at],
     );
 
-    const inviteLink = buildInviteLink(token);
+    const invite_link = buildInviteLink(token);
 
-    return NextResponse.json(
+    logInfo("family_invite.created", {
+      request_id,
+      family_id: family.family_id,
+      invited_by_user_id: user.user_id,
+      invite_id: invite.id,
+      email,
+    });
+
+    return jsonSuccess(
       {
-        success: true,
-        data: {
-          invite,
-          inviteLink,
-        },
+        invite,
+        invite_link,
       },
-      { status: 201 }
+      {
+        request_id,
+        status: 201,
+      },
     );
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.status }
-      );
-    }
-    console.error("Error creating invite:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to create invite" },
-      { status: 500 }
-    );
-  }
-}
+  },
+  {
+    auth: "admin",
+  },
+);

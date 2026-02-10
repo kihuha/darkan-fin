@@ -28,7 +28,7 @@ type FamilyInviteFormProps = {
       expires_at: string;
       created_at: string;
     };
-    inviteLink: string;
+    invite_link: string;
   }) => void;
 };
 

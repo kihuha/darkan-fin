@@ -15,9 +15,9 @@ dev:
 # Apply application SQL migrations
 migrate:
 	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required" >&2; exit 1)
-	psql -v ON_ERROR_STOP=1 "$$DATABASE_URL" -f app_migrations/init.sql
-	psql -v ON_ERROR_STOP=1 "$$DATABASE_URL" -f app_migrations/add_transaction.sql
-	psql -v ON_ERROR_STOP=1 "$$DATABASE_URL" -f app_migrations/add_family_multi_tenant.sql
+	for file in $$(find app_migrations -maxdepth 1 -name '*.sql' ! -name 'seed.sql' | sort); do \
+		psql -v ON_ERROR_STOP=1 "$$DATABASE_URL" -f "$$file"; \
+	done
 
 # Seed reference data
 seed:

@@ -1,43 +1,38 @@
-import { betterAuth } from "better-auth";
-import { Pool } from "pg";
-import { customSession } from "better-auth/plugins";
-import db from "./db";
+import "server-only";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
-}
+import { betterAuth } from "better-auth";
+import { customSession } from "better-auth/plugins";
+import { Pool } from "pg";
+import db from "@/utils/db";
+import { requireEnv } from "@/utils/server/env";
+
+const database_url = requireEnv("DATABASE_URL");
+const better_auth_secret = requireEnv("BETTER_AUTH_SECRET");
+const better_auth_url = requireEnv("BETTER_AUTH_URL");
 
 export const auth = betterAuth({
-  database: new Pool({ connectionString: process.env.DATABASE_URL }),
-  secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL,
-
+  database: new Pool({ connectionString: database_url }),
+  secret: better_auth_secret,
+  baseURL: better_auth_url,
   emailAndPassword: {
     enabled: true,
   },
   plugins: [
     customSession(async ({ user, session }) => {
-      try {
-        const family = await db.query(
-          `SELECT family_id FROM family_member WHERE user_id = $1`,
-          [user.id],
-        );
+      const family = await db.oneOrNone<{ family_id: string }>(
+        `SELECT family_id
+         FROM family_member
+         WHERE user_id = $1`,
+        [user.id],
+      );
 
-        if (!family || family.length === 0) {
-          throw new Error("Family not found");
-        }
-
-        return {
-          session,
-          user: {
-            ...user,
-            family_id: family[0].family_id,
-          },
-        };
-      } catch (error) {
-        console.error("Error in customSession plugin:", error);
-        throw error;
-      }
+      return {
+        session,
+        user: {
+          ...user,
+          family_id: family?.family_id ?? null,
+        },
+      };
     }),
   ],
 });

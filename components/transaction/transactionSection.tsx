@@ -87,13 +87,15 @@ export const TransactionSection = () => {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `/api/transaction?page=${page}&rowsPerPage=${rowsPerPage}`,
+        `/api/transaction?page=${page}&rows_per_page=${rowsPerPage}`,
       );
       const result = await response.json();
 
-      if (result.success) {
-        setTransactions(result.data);
-        setTotalPages(result.pagination.totalPages);
+      if (response.ok && result.success) {
+        setTransactions(result.data.rows);
+        setTotalPages(result.data.pagination.total_pages);
+      } else {
+        toast.error(result.error || "Failed to load transactions");
       }
     } catch (error) {
       console.error("Error fetching transactions:", error);
@@ -127,12 +129,11 @@ export const TransactionSection = () => {
         },
       );
 
-      const result = await response.json();
-
-      if (result.success) {
+      if (response.status === 204) {
         toast.success("Transaction deleted successfully");
         fetchTransactions();
       } else {
+        const result = await response.json();
         toast.error(result.error || "Failed to delete transaction");
       }
     } catch (error) {
@@ -155,7 +156,7 @@ export const TransactionSection = () => {
         },
         body: JSON.stringify({
           id: transactionId,
-          categoryId,
+          category_id: categoryId,
         }),
       });
 

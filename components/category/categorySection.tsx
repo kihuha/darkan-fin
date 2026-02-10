@@ -95,12 +95,11 @@ export const CategorySection = () => {
         method: "DELETE",
       });
 
-      const result = await response.json();
-
-      if (result.success) {
+      if (response.status === 204) {
         toast.success("Category deleted successfully");
         fetchCategories();
       } else {
+        const result = await response.json();
         toast.error(result.error || "Failed to delete category");
       }
     } catch (error) {

@@ -103,12 +103,12 @@ export default function DashboardPage() {
       );
       const transactionResult = await transactionResponse.json();
 
-      if (!transactionResult.success) {
+      if (!transactionResponse.ok || !transactionResult.success) {
         toast.error("Failed to load transactions");
         return;
       }
 
-      const transactions: TransactionWithCategory[] = transactionResult.data;
+      const transactions: TransactionWithCategory[] = transactionResult.data.rows;
 
       // Calculate spending per category
       const spendingByCategory = transactions

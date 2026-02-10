@@ -1,344 +1,327 @@
-import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import db from "@/utils/db";
 import {
-  createCategorySchema,
-  updateCategorySchema,
+  create_category_schema,
+  update_category_schema,
 } from "@/lib/validations/category";
-import { ApiError, requireFamilyContext } from "@/utils/auth-helpers";
 import { findCategoryIdByTags } from "@/lib/category-recategorization";
+import { jsonSuccess } from "@/utils/api-response";
+import { ApiError } from "@/utils/errors";
+import { withRouteContext } from "@/utils/route";
+import { requireFoundInFamily, scopedOneOrNone } from "@/utils/db/scoped";
 
-// GET - Fetch all categories
-export async function GET(request: NextRequest) {
-  try {
-    const { familyId } = await requireFamilyContext(request.headers);
+const category_delete_query_schema = z.object({
+  id: z.coerce.number().int().positive(),
+});
 
-    const categories = await db.any(
-      `
-        SELECT id, name, type, amount, repeats, description, tags, created_at, updated_at
-        FROM category
-        WHERE family_id = $1
-        ORDER BY name ASC
-      `,
-      [familyId],
-    );
+const category_action_query_schema = z.object({
+  action: z.enum(["recategorize"]).optional(),
+});
 
-    return NextResponse.json(
-      { success: true, data: categories },
-      { status: 200 },
-    );
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.status },
-      );
-    }
-    console.error("Error fetching categories:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch categories" },
-      { status: 500 },
+export const GET = withRouteContext(async ({ family, request_id }) => {
+  if (!family) {
+    throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
+  }
+
+  const categories = await db.any(
+    `SELECT id,
+            name,
+            type,
+            amount,
+            repeats,
+            description,
+            tags,
+            created_at,
+            updated_at
+     FROM category
+     WHERE family_id = $1
+     ORDER BY name ASC`,
+    [family.family_id],
+  );
+
+  return jsonSuccess(categories, {
+    request_id,
+    status: 200,
+  });
+});
+
+export const POST = withRouteContext(async ({ request, family, request_id }) => {
+  if (!family) {
+    throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
+  }
+
+  const parsed_query = category_action_query_schema.safeParse(
+    Object.fromEntries(request.nextUrl.searchParams.entries()),
+  );
+
+  if (!parsed_query.success) {
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "Validation failed",
+      parsed_query.error.issues,
     );
   }
-}
 
-// POST - Create a new category
-export async function POST(request: NextRequest) {
-  try {
-    const { familyId } = await requireFamilyContext(request.headers);
-    const { searchParams } = new URL(request.url);
-    const action = searchParams.get("action");
-
-    if (action === "recategorize") {
-      const result = await recategorizeTransactions(familyId);
-      return NextResponse.json(
-        { success: true, data: result },
-        { status: 200 },
-      );
-    }
-
-    const body = await request.json();
-
-    // Validate request body
-    const validationResult = createCategorySchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Validation failed",
-          details: validationResult.error.issues,
-        },
-        { status: 400 },
-      );
-    }
-
-    const { name, type, amount, repeats, description, tags } =
-      validationResult.data;
-
-    // Check if category with same name already exists
-    const existing = await db.oneOrNone(
-      "SELECT id FROM category WHERE family_id = $1 AND LOWER(name) = LOWER($2)",
-      [familyId, name],
-    );
-
-    if (existing) {
-      return NextResponse.json(
-        { success: false, error: "A category with this name already exists" },
-        { status: 409 },
-      );
-    }
-
-    // Insert new category
-    const newCategory = await db.one(
-      `INSERT INTO category (family_id, name, type, amount, repeats, description, tags)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, name, type, amount, repeats, description, tags, created_at, updated_at`,
-      [
-        familyId,
-        name,
-        type,
-        amount ?? 0,
-        repeats,
-        description || null,
-        tags ?? [],
-      ],
-    );
-
-    return NextResponse.json(
-      { success: true, data: newCategory },
-      { status: 201 },
-    );
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.status },
-      );
-    }
-    console.error("Error creating category:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to create category" },
-      { status: 500 },
-    );
-  }
-}
-
-// PATCH - Update an existing category
-export async function PATCH(request: NextRequest) {
-  try {
-    const { familyId } = await requireFamilyContext(request.headers);
-    const body = await request.json();
-
-    // Validate request body
-    const validationResult = updateCategorySchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Validation failed",
-          details: validationResult.error.issues,
-        },
-        { status: 400 },
-      );
-    }
-
-    const { id, name, type, amount, repeats, description, tags } =
-      validationResult.data;
-
-    // Check if category exists
-    const existing = await db.oneOrNone(
-      "SELECT id FROM category WHERE id = $1 AND family_id = $2",
-      [id, familyId],
-    );
-
-    if (!existing) {
-      return NextResponse.json(
-        { success: false, error: "Category not found" },
-        { status: 404 },
-      );
-    }
-
-    // Check if another category with the same name exists (if name is being updated)
-    if (name) {
-      const duplicate = await db.oneOrNone(
-        `SELECT id
-         FROM category
-         WHERE family_id = $1
-           AND LOWER(name) = LOWER($2)
-           AND id != $3`,
-        [familyId, name, id],
-      );
-
-      if (duplicate) {
-        return NextResponse.json(
-          { success: false, error: "A category with this name already exists" },
-          { status: 409 },
-        );
-      }
-    }
-
-    // Build dynamic update query
-    const updates: string[] = [];
-    const values: unknown[] = [];
-    let paramCount = 1;
-
-    if (name !== undefined) {
-      updates.push(`name = $${paramCount++}`);
-      values.push(name);
-    }
-    if (type !== undefined) {
-      updates.push(`type = $${paramCount++}`);
-      values.push(type);
-    }
-    if (amount !== undefined) {
-      updates.push(`amount = $${paramCount++}`);
-      values.push(amount);
-    }
-    if (repeats !== undefined) {
-      updates.push(`repeats = $${paramCount++}`);
-      values.push(repeats);
-    }
-    if (description !== undefined) {
-      updates.push(`description = $${paramCount++}`);
-      values.push(description);
-    }
-    if (tags !== undefined) {
-      updates.push(`tags = $${paramCount++}`);
-      values.push(tags);
-    }
-
-    updates.push(`updated_at = NOW()`);
-    values.push(id, familyId);
-
-    const query = `
-      UPDATE category
-      SET ${updates.join(", ")}
-      WHERE id = $${paramCount} AND family_id = $${paramCount + 1}
-      RETURNING id, name, type, amount, repeats, description, tags, created_at, updated_at
-    `;
-
-    const updatedCategory = await db.one(query, values);
-
-    return NextResponse.json(
-      { success: true, data: updatedCategory },
-      { status: 200 },
-    );
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.status },
-      );
-    }
-    console.error("Error updating category:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to update category" },
-      { status: 500 },
-    );
-  }
-}
-
-// DELETE - Delete a category and move its items to "Uncategorized"
-export async function DELETE(request: NextRequest) {
-  try {
-    const { familyId } = await requireFamilyContext(request.headers);
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: "Category ID is required" },
-        { status: 400 },
-      );
-    }
-
-    // Check if category exists
-    const category = await db.oneOrNone(
-      "SELECT id, name FROM category WHERE id = $1 AND family_id = $2",
-      [id, familyId],
-    );
-
-    if (!category) {
-      return NextResponse.json(
-        { success: false, error: "Category not found" },
-        { status: 404 },
-      );
-    }
-
-    // Prevent deletion of Uncategorized category
-    if (category.name.toLowerCase() === "uncategorized") {
-      return NextResponse.json(
-        { success: false, error: "Cannot delete the Uncategorized category" },
-        { status: 400 },
-      );
-    }
-
-    // Get or create Uncategorized category
-    let uncategorized = await db.oneOrNone(
-      "SELECT id FROM category WHERE family_id = $1 AND LOWER(name) = 'uncategorized'",
-      [familyId],
-    );
-
-    if (!uncategorized) {
-      uncategorized = await db.one(
-        `INSERT INTO category (family_id, name, type, amount, repeats, description)
-         VALUES ($1, 'Uncategorized', 'expense', 0, false, 'Default category for uncategorized items')
-         ON CONFLICT (family_id, LOWER(name))
-         DO UPDATE SET updated_at = NOW()
-         RETURNING id`,
-        [familyId],
-      );
-    }
-
-    await db.tx(async (tx) => {
-      // Move all budget items to Uncategorized category
-      await tx.none(
-        `UPDATE budget_item 
-         SET category_id = $1 
-         WHERE category_id = $2 AND family_id = $3`,
-        [uncategorized.id, id, familyId],
-      );
-
-      // Move all transactions to Uncategorized category
-      await tx.none(
-        `UPDATE transaction
-         SET category_id = $1
-         WHERE category_id = $2 AND family_id = $3`,
-        [uncategorized.id, id, familyId],
-      );
-
-      // Delete the category
-      await tx.none("DELETE FROM category WHERE id = $1 AND family_id = $2", [
-        id,
-        familyId,
-      ]);
+  if (parsed_query.data.action === "recategorize") {
+    const result = await recategorizeTransactions(family.family_id);
+    return jsonSuccess(result, {
+      request_id,
+      status: 200,
     });
+  }
 
-    return NextResponse.json(
-      { success: true, message: "Category deleted successfully" },
-      { status: 200 },
-    );
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.status },
-      );
-    }
-    console.error("Error deleting category:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to delete category" },
-      { status: 500 },
+  const parsed_body = create_category_schema.safeParse(await request.json());
+
+  if (!parsed_body.success) {
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "Validation failed",
+      parsed_body.error.issues,
     );
   }
-}
 
-async function recategorizeTransactions(familyId: string) {
+  const { name, type, amount, repeats, description, tags } = parsed_body.data;
+
+  const existing = await scopedOneOrNone<{ id: string }>(
+    family.family_id,
+    `SELECT id
+     FROM category
+     WHERE family_id = $1
+       AND LOWER(name) = LOWER($2)`,
+    [name],
+  );
+
+  if (existing) {
+    throw new ApiError(409, "CONFLICT", "A category with this name already exists");
+  }
+
+  const new_category = await db.one(
+    `INSERT INTO category (family_id, name, type, amount, repeats, description, tags)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id,
+               name,
+               type,
+               amount,
+               repeats,
+               description,
+               tags,
+               created_at,
+               updated_at`,
+    [
+      family.family_id,
+      name,
+      type,
+      amount ?? 0,
+      repeats,
+      description,
+      tags ?? [],
+    ],
+  );
+
+  return jsonSuccess(new_category, {
+    request_id,
+    status: 201,
+  });
+});
+
+export const PATCH = withRouteContext(async ({ request, family, request_id }) => {
+  if (!family) {
+    throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
+  }
+
+  const parsed_body = update_category_schema.safeParse(await request.json());
+
+  if (!parsed_body.success) {
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "Validation failed",
+      parsed_body.error.issues,
+    );
+  }
+
+  const { id, name, type, amount, repeats, description, tags } = parsed_body.data;
+
+  const existing = await scopedOneOrNone<{ id: string }>(
+    family.family_id,
+    `SELECT id
+     FROM category
+     WHERE family_id = $1
+       AND id = $2`,
+    [id],
+  );
+
+  requireFoundInFamily(existing, "Category");
+
+  if (name) {
+    const duplicate = await scopedOneOrNone<{ id: string }>(
+      family.family_id,
+      `SELECT id
+       FROM category
+       WHERE family_id = $1
+         AND LOWER(name) = LOWER($2)
+         AND id != $3`,
+      [name, id],
+    );
+
+    if (duplicate) {
+      throw new ApiError(409, "CONFLICT", "A category with this name already exists");
+    }
+  }
+
+  const updates: string[] = [];
+  const values: unknown[] = [];
+
+  if (name !== undefined) {
+    values.push(name);
+    updates.push(`name = $${values.length}`);
+  }
+
+  if (type !== undefined) {
+    values.push(type);
+    updates.push(`type = $${values.length}`);
+  }
+
+  if (amount !== undefined) {
+    values.push(amount);
+    updates.push(`amount = $${values.length}`);
+  }
+
+  if (repeats !== undefined) {
+    values.push(repeats);
+    updates.push(`repeats = $${values.length}`);
+  }
+
+  if (description !== undefined) {
+    values.push(description);
+    updates.push(`description = $${values.length}`);
+  }
+
+  if (tags !== undefined) {
+    values.push(tags);
+    updates.push(`tags = $${values.length}`);
+  }
+
+  updates.push("updated_at = NOW()");
+
+  values.push(id, family.family_id);
+  const id_index = values.length - 1;
+  const family_index = values.length;
+
+  const updated_category = await db.one(
+    `UPDATE category
+     SET ${updates.join(", ")}
+     WHERE id = $${id_index}
+       AND family_id = $${family_index}
+     RETURNING id,
+               name,
+               type,
+               amount,
+               repeats,
+               description,
+               tags,
+               created_at,
+               updated_at`,
+    values,
+  );
+
+  return jsonSuccess(updated_category, {
+    request_id,
+    status: 200,
+  });
+});
+
+export const DELETE = withRouteContext(async ({ request, family }) => {
+  if (!family) {
+    throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
+  }
+
+  const parsed_query = category_delete_query_schema.safeParse(
+    Object.fromEntries(request.nextUrl.searchParams.entries()),
+  );
+
+  if (!parsed_query.success) {
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "Validation failed",
+      parsed_query.error.issues,
+    );
+  }
+
+  const category_id = parsed_query.data.id;
+
+  const category = await scopedOneOrNone<{ id: string; name: string }>(
+    family.family_id,
+    `SELECT id, name
+     FROM category
+     WHERE family_id = $1
+       AND id = $2`,
+    [category_id],
+  );
+
+  const scoped_category = requireFoundInFamily(category, "Category");
+
+  if (scoped_category.name.toLowerCase() === "uncategorized") {
+    throw new ApiError(400, "VALIDATION_ERROR", "Cannot delete the Uncategorized category");
+  }
+
+  let uncategorized = await scopedOneOrNone<{ id: string }>(
+    family.family_id,
+    `SELECT id
+     FROM category
+     WHERE family_id = $1
+       AND LOWER(name) = 'uncategorized'`,
+  );
+
+  if (!uncategorized) {
+    uncategorized = await db.one<{ id: string }>(
+      `INSERT INTO category (family_id, name, type, amount, repeats, description)
+       VALUES ($1, 'Uncategorized', 'expense', 0, false, 'Default category for uncategorized items')
+       ON CONFLICT (family_id, LOWER(name))
+       DO UPDATE SET updated_at = NOW()
+       RETURNING id`,
+      [family.family_id],
+    );
+  }
+
+  await db.tx(async (tx) => {
+    await tx.none(
+      `UPDATE budget_item
+       SET category_id = $1
+       WHERE family_id = $2
+         AND category_id = $3`,
+      [uncategorized.id, family.family_id, category_id],
+    );
+
+    await tx.none(
+      `UPDATE transaction
+       SET category_id = $1
+       WHERE family_id = $2
+         AND category_id = $3`,
+      [uncategorized.id, family.family_id, category_id],
+    );
+
+    await tx.none(
+      `DELETE FROM category
+       WHERE family_id = $1
+         AND id = $2`,
+      [family.family_id, category_id],
+    );
+  });
+
+  return new Response(null, { status: 204 });
+});
+
+async function recategorizeTransactions(family_id: string) {
   return db.tx(async (tx) => {
     const categories = await tx.any(
-      "SELECT id, name, tags FROM category WHERE family_id = $1",
-      [familyId],
+      `SELECT id, name, tags
+       FROM category
+       WHERE family_id = $1`,
+      [family_id],
     );
 
     const uncategorized = categories.find(
@@ -349,35 +332,42 @@ async function recategorizeTransactions(familyId: string) {
     if (!uncategorized?.id) {
       throw new ApiError(
         500,
+        "INTERNAL_ERROR",
         "Default Uncategorized category not found. Please run the database seed.",
       );
     }
 
-    const matchableCategories = categories.filter(
-      (category: { id: number | string }) => category.id !== uncategorized.id,
+    const matchable_categories = categories.filter(
+      (category: { id: string | number }) => category.id !== uncategorized.id,
     );
 
-    const transactions = await tx.any(
+    const transactions = await tx.any<{ id: string; description: string | null }>(
       `SELECT id, description
        FROM transaction
-       WHERE family_id = $1 AND category_id = $2`,
-      [familyId, uncategorized.id],
+       WHERE family_id = $1
+         AND category_id = $2`,
+      [family_id, uncategorized.id],
     );
 
     let updated = 0;
 
     for (const transaction of transactions) {
-      const nextCategoryId = findCategoryIdByTags(
+      const next_category_id = findCategoryIdByTags(
         transaction.description,
-        matchableCategories,
+        matchable_categories,
         uncategorized.id,
       );
 
-      if (nextCategoryId !== uncategorized.id) {
+      if (next_category_id !== uncategorized.id) {
         await tx.none(
-          "UPDATE transaction SET category_id = $1 WHERE id = $2 AND family_id = $3",
-          [nextCategoryId, transaction.id, familyId],
+          `UPDATE transaction
+           SET category_id = $1,
+               updated_at = NOW()
+           WHERE family_id = $2
+             AND id = $3`,
+          [next_category_id, family_id, transaction.id],
         );
+
         updated += 1;
       }
     }

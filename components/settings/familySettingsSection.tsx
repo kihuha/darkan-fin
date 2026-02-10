@@ -99,9 +99,9 @@ export function FamilySettingsSection() {
 
   const handleInviteCreated = (payload: {
     invite: FamilyInvite;
-    inviteLink: string;
+    invite_link: string;
   }) => {
-    setInviteLink(payload.inviteLink);
+    setInviteLink(payload.invite_link);
     fetchFamily();
   };
 
@@ -123,7 +123,7 @@ export function FamilySettingsSection() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ inviteId }),
+        body: JSON.stringify({ invite_id: inviteId }),
       });
 
       const result = await response.json();

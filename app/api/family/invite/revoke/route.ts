@@ -1,65 +1,60 @@
-import { NextRequest, NextResponse } from "next/server";
 import db from "@/utils/db";
-import { ApiError, assertAdmin, requireFamilyContext } from "@/utils/auth-helpers";
-import { familyInviteRevokeSchema } from "@/lib/validations/family";
+import { family_invite_revoke_schema } from "@/lib/validations/family";
+import { jsonSuccess } from "@/utils/api-response";
+import { ApiError } from "@/utils/errors";
+import { withRouteContext } from "@/utils/route";
 
-export async function POST(request: NextRequest) {
-  try {
-    const context = await requireFamilyContext(request.headers);
-    assertAdmin(context);
+export const POST = withRouteContext(
+  async ({ request, family, request_id }) => {
+    if (!family) {
+      throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
+    }
 
-    const body = await request.json();
-    const validationResult = familyInviteRevokeSchema.safeParse(body);
+    const parsed_body = family_invite_revoke_schema.safeParse(await request.json());
 
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Validation failed",
-          details: validationResult.error.issues,
-        },
-        { status: 400 }
+    if (!parsed_body.success) {
+      throw new ApiError(
+        400,
+        "VALIDATION_ERROR",
+        "Validation failed",
+        parsed_body.error.issues,
       );
     }
 
-    const { inviteId } = validationResult.data;
+    const { invite_id } = parsed_body.data;
 
-    const invite = await db.oneOrNone(
+    const invite = await db.oneOrNone<{ id: string }>(
       `SELECT id
        FROM family_invite
-       WHERE id = $1 AND family_id = $2 AND status = 'pending'`,
-      [inviteId, context.familyId]
+       WHERE id = $1
+         AND family_id = $2
+         AND status = 'pending'`,
+      [invite_id, family.family_id],
     );
 
     if (!invite) {
-      return NextResponse.json(
-        { success: false, error: "Invite not found" },
-        { status: 404 }
-      );
+      throw new ApiError(404, "NOT_FOUND", "Invite not found");
     }
 
     await db.none(
       `UPDATE family_invite
-       SET status = 'revoked', updated_at = NOW()
+       SET status = 'revoked',
+           updated_at = NOW()
        WHERE id = $1`,
-      [inviteId]
+      [invite_id],
     );
 
-    return NextResponse.json(
-      { success: true, message: "Invite revoked" },
-      { status: 200 }
+    return jsonSuccess(
+      {
+        message: "Invite revoked",
+      },
+      {
+        request_id,
+        status: 200,
+      },
     );
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.status }
-      );
-    }
-    console.error("Error revoking invite:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to revoke invite" },
-      { status: 500 }
-    );
-  }
-}
+  },
+  {
+    auth: "admin",
+  },
+);

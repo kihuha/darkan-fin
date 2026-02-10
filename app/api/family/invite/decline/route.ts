@@ -1,86 +1,75 @@
-import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import db from "@/utils/db";
-import { ApiError, requireUser } from "@/utils/auth-helpers";
-import { familyInviteTokenSchema } from "@/lib/validations/family";
+import { family_invite_token_schema } from "@/lib/validations/family";
+import { jsonSuccess } from "@/utils/api-response";
+import { ApiError } from "@/utils/errors";
+import { withRouteContext } from "@/utils/route";
+import { requireEnv } from "@/utils/server/env";
 
 function hashToken(token: string) {
-  const pepper = process.env.INVITE_TOKEN_PEPPER;
+  const invite_token_pepper = requireEnv("INVITE_TOKEN_PEPPER");
 
-  if (!pepper) {
-    throw new ApiError(500, "INVITE_TOKEN_PEPPER is not configured");
-  }
-
-  return crypto.createHash("sha256").update(`${token}${pepper}`).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(`${token}${invite_token_pepper}`)
+    .digest("hex");
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const user = await requireUser(request.headers);
-    const body = await request.json();
-    const validationResult = familyInviteTokenSchema.safeParse(body);
+export const POST = withRouteContext(
+  async ({ request, user, request_id }) => {
+    if (!user) {
+      throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
+    }
 
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Invite token is invalid",
-          details: validationResult.error.issues,
-        },
-        { status: 400 }
+    const parsed_body = family_invite_token_schema.safeParse(await request.json());
+
+    if (!parsed_body.success) {
+      throw new ApiError(
+        400,
+        "VALIDATION_ERROR",
+        "Invite token is invalid",
+        parsed_body.error.issues,
       );
     }
 
-    const tokenHash = hashToken(validationResult.data.token);
+    const token_hash = hashToken(parsed_body.data.token);
 
-    const invite = await db.oneOrNone<{
-      id: string;
-      email: string;
-    }>(
+    const invite = await db.oneOrNone<{ id: string; email: string }>(
       `SELECT id, email
        FROM family_invite
        WHERE token_hash = $1
          AND status = 'pending'
          AND expires_at > NOW()`,
-      [tokenHash]
+      [token_hash],
     );
 
     if (!invite) {
-      return NextResponse.json(
-        { success: false, error: "Invite is invalid or expired" },
-        { status: 404 }
-      );
+      throw new ApiError(404, "NOT_FOUND", "Invite is invalid or expired");
     }
 
     if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
-      return NextResponse.json(
-        { success: false, error: "Invite does not match this account" },
-        { status: 403 }
-      );
+      throw new ApiError(403, "FORBIDDEN", "Invite does not match this account");
     }
 
     await db.none(
       `UPDATE family_invite
-       SET status = 'revoked', updated_at = NOW()
+       SET status = 'revoked',
+           updated_at = NOW()
        WHERE id = $1`,
-      [invite.id]
+      [invite.id],
     );
 
-    return NextResponse.json(
-      { success: true, message: "Invite declined" },
-      { status: 200 }
+    return jsonSuccess(
+      {
+        message: "Invite declined",
+      },
+      {
+        request_id,
+        status: 200,
+      },
     );
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return NextResponse.json(
-        { success: false, error: error.message },
-        { status: error.status }
-      );
-    }
-    console.error("Error declining invite:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to decline invite" },
-      { status: 500 }
-    );
-  }
-}
+  },
+  {
+    auth: "user",
+  },
+);

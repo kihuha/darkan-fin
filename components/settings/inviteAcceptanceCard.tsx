@@ -14,9 +14,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 
 type InvitePreview = {
-  familyName: string | null;
-  inviterEmail: string;
-  expiresAt: string;
+  family_name: string | null;
+  inviter_email: string;
+  expires_at: string;
 };
 
 type InviteAcceptanceCardProps = {
@@ -134,12 +134,12 @@ export function InviteAcceptanceCard({ token }: InviteAcceptanceCardProps) {
     <Card className="w-full border-white/60 bg-white/80 shadow-xl shadow-black/5 backdrop-blur">
       <CardHeader>
         <CardTitle className="text-2xl">
-          Join {preview?.familyName || "a family"}
+          Join {preview?.family_name || "a family"}
         </CardTitle>
         <CardDescription>
-          You were invited by {preview?.inviterEmail}. This invite expires on{" "}
-          {preview?.expiresAt
-            ? new Date(preview.expiresAt).toLocaleDateString()
+          You were invited by {preview?.inviter_email}. This invite expires on{" "}
+          {preview?.expires_at
+            ? new Date(preview.expires_at).toLocaleDateString()
             : "soon"}
           .
         </CardDescription>

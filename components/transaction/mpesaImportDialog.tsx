@@ -72,10 +72,15 @@ export function MpesaImportDialog({
         return;
       }
 
-      const { imported, skipped } = result.data ?? {};
+      const { inserted_count, skipped_duplicates_count, errors_count } =
+        result.data ?? {};
       toast.success(
-        `Imported ${imported ?? 0} transactions${
-          skipped ? `, skipped ${skipped}` : ""
+        `Imported ${inserted_count ?? 0} transactions${
+          skipped_duplicates_count
+            ? `, skipped duplicates ${skipped_duplicates_count}`
+            : ""
+        }${
+          errors_count ? `, discarded invalid rows ${errors_count}` : ""
         }.`,
       );
 
