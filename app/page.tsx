@@ -1,4 +1,5 @@
 import { LoginForm } from "@/components/forms/loginForm";
+import { Logo } from "@/components/logo";
 import {
   Card,
   CardContent,
@@ -8,11 +9,9 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 
-export default async function LoginPage(
-  props: {
-    searchParams?: Promise<{ redirect?: string }>;
-  }
-) {
+export default async function LoginPage(props: {
+  searchParams?: Promise<{ redirect?: string }>;
+}) {
   const searchParams = await props.searchParams;
   const redirectTo = searchParams?.redirect;
 
@@ -22,9 +21,7 @@ export default async function LoginPage(
       <div className="relative mx-auto flex min-h-svh max-w-6xl flex-col gap-10 px-4 py-10 sm:px-8 lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:gap-12 lg:px-12">
         <section className="flex flex-col justify-center gap-8 animate-fade-up">
           <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center  bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-              DF
-            </div>
+            <Logo />
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
                 Darkan Fin

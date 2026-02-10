@@ -1,15 +1,11 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Geist_Mono, Figtree } from "next/font/google";
+import { Geist_Mono, Figtree } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const figtree = Figtree({
-  variable: "--font-figtree",
-  subsets: ["latin"],
-});
-
-const bricolageGrotesque = Bricolage_Grotesque({
-  variable: "--font-bricolage",
+  variable: "--font-sans",
   subsets: ["latin"],
 });
 
@@ -29,12 +25,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${figtree.variable} ${bricolageGrotesque.variable} ${geistMono.variable}`}
-    >
+    <html lang="en" className={`${figtree.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased">
-        {children}
+        <TooltipProvider>{children}</TooltipProvider>
 
         <Toaster />
       </body>
