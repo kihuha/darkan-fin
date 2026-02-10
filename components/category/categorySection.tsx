@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { type Category } from "@/lib/validations/category";
-import { CategoryTable } from "./categoryTable";
+
 import { CategoryForm } from "../forms/categoryForm";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,16 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { Header } from "../header";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "../ui/item";
+import { Badge } from "../ui/badge";
+import { ScrollArea } from "../ui/scroll-area";
 
 export const CategorySection = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -133,41 +143,39 @@ export const CategorySection = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Categories
-          </h2>
-          <p className="text-sm text-muted-foreground sm:text-base">
-            Manage your expense and income categories
-          </p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
-              <Plus className="mr-2 h-4 w-4" />
-              New Category
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-150">
-            <DialogHeader>
-              <DialogTitle>
-                {selectedCategory ? "Edit Category" : "Create Category"}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedCategory
-                  ? "Update the category details below"
-                  : "Add a new category to organize your transactions"}
-              </DialogDescription>
-            </DialogHeader>
-            <CategoryForm
-              category={selectedCategory}
-              onSuccess={handleSuccess}
-              onCancel={() => handleDialogChange(false)}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+      <Header
+        label="Categories"
+        actions={
+          <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                New Category
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-150">
+              <ScrollArea className="max-h-[70vh] md:max-h-full">
+                <DialogHeader>
+                  <DialogTitle>
+                    {selectedCategory ? "Edit Category" : "Create Category"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {selectedCategory
+                      ? "Update the category details below"
+                      : "Add a new category to organize your transactions"}
+                  </DialogDescription>
+                </DialogHeader>
+                <CategoryForm
+                  category={selectedCategory}
+                  onSuccess={handleSuccess}
+                  onCancel={() => handleDialogChange(false)}
+                  onDelete={handleDelete}
+                />
+              </ScrollArea>
+            </DialogContent>
+          </Dialog>
+        }
+      />
 
       {categories.length === 0 ? (
         <Empty>
@@ -185,11 +193,39 @@ export const CategorySection = () => {
           </EmptyContent>
         </Empty>
       ) : (
-        <CategoryTable
-          categories={categories}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {categories.map((category) => (
+            <Item key={category.id} variant="outline">
+              <ItemContent>
+                <ItemTitle>{category.name}</ItemTitle>
+                <ItemDescription>{category.description}</ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleEdit(category)}
+                >
+                  Action
+                </Button>
+              </ItemActions>
+
+              <div className="w-full">
+                <Badge
+                  variant={category.type === "income" ? "default" : "secondary"}
+                  className="capitalize px-4 py-1"
+                >
+                  {category.type}
+                </Badge>
+                {category.repeats && (
+                  <Badge variant="default" className="ml-2 px-4 py-1">
+                    Repeats: {category.amount}
+                  </Badge>
+                )}
+              </div>
+            </Item>
+          ))}
+        </div>
       )}
 
       <AlertDialog

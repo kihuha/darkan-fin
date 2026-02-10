@@ -34,6 +34,7 @@ interface CategoryFormProps {
   category?: Category | null;
   onSuccess?: () => void;
   onCancel?: () => void;
+  onDelete?: (category: Category) => void;
 }
 
 const formSchema = z.object({
@@ -60,6 +61,7 @@ export function CategoryForm({
   category,
   onSuccess,
   onCancel,
+  onDelete,
 }: CategoryFormProps) {
   const isEditing = !!category?.id;
   const [tagInput, setTagInput] = useState("");
@@ -190,7 +192,7 @@ export function CategoryForm({
               <FormLabel>Type</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select category type" />
                   </SelectTrigger>
                 </FormControl>
@@ -329,18 +331,31 @@ export function CategoryForm({
           )}
         />
 
-        <div className="flex justify-end gap-3">
-          {onCancel && (
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-          )}
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <div className="flex justify-between gap-3">
+          <div>
+            {isEditing && onDelete && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => onDelete(category!)}
+              >
+                Delete
+              </Button>
             )}
-            {isEditing ? "Update Category" : "Create Category"}
-          </Button>
+          </div>
+          <div className="flex items-center gap-x-4">
+            {onCancel && (
+              <Button type="button" variant="outline" onClick={onCancel}>
+                Cancel
+              </Button>
+            )}
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {isEditing ? "Update Category" : "Create Category"}
+            </Button>
+          </div>
         </div>
       </form>
     </Form>
