@@ -1,38 +1,43 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { authClient } from "@/lib/auth-client";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Controller, useForm } from "react-hook-form";
+import { toast } from "sonner";
+import * as z from "zod";
+
 import { Button } from "@/components/ui/button";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+
+import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useState } from "react";
 
-type SignupFormData = {
-  name: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-};
+const formSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters long"),
+    email: z.email("Please enter a valid email address"),
+    password: z.string().min(6, "Password must be at least 6 characters long"),
+    confirmPassword: z
+      .string()
+      .min(6, "Confirm Password must be at least 6 characters long"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
-type SignupFormProps = {
-  redirectTo?: string;
-};
-
-export const SignupForm = ({ redirectTo }: SignupFormProps) => {
+export const SignupForm = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const form = useForm<SignupFormData>({
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
       email: "",
@@ -41,131 +46,110 @@ export const SignupForm = ({ redirectTo }: SignupFormProps) => {
     },
   });
 
-  const onSubmit = async (data: SignupFormData) => {
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
     setIsLoading(true);
-    setError(null);
 
-    // Validate passwords match
-    if (data.password !== data.confirmPassword) {
-      setError("Passwords do not match");
-      toast.error("Passwords do not match");
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const response = await authClient.signUp.email({
+    await authClient.signUp.email(
+      {
         email: data.email,
         password: data.password,
         name: data.name,
-      });
-
-      if (response.error) {
-        setError(response.error.message || "Failed to sign up");
-        toast.error(response.error.message || "Failed to sign up");
-        setIsLoading(false);
-        return;
-      }
-
-      toast.success("Account created successfully!");
-      // Redirect to dashboard or home page after successful signup
-      router.push(redirectTo || "/dashboard");
-      router.refresh();
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to sign up";
-      setError(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
+      },
+      {
+        onRequest: () => {
+          setIsLoading(true);
+        },
+        onSuccess: () => {
+          setIsLoading(false);
+          toast.success("Successfully signed up!");
+          router.push("/dashboard");
+          router.refresh();
+        },
+        onError: (ctx) => {
+          setIsLoading(false);
+          toast.error(ctx.error.message || "Failed to sign up");
+        },
+      },
+    );
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <FormField
-          control={form.control}
+    <form id="form-rhf-demo" onSubmit={form.handleSubmit(onSubmit)}>
+      <FieldGroup>
+        <Controller
           name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Name</FormLabel>
-              <FormControl>
-                <Input
-                  type="text"
-                  placeholder="Enter your name"
-                  {...field}
-                  disabled={isLoading}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+          control={form.control}
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor="form-rhf-demo-name">Name</FieldLabel>
+              <Input
+                {...field}
+                id="form-rhf-demo-name"
+                aria-invalid={fieldState.invalid}
+                autoComplete="off"
+              />
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
           )}
         />
-
-        <FormField
-          control={form.control}
+        <Controller
           name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input
-                  type="email"
-                  placeholder="Enter your email"
-                  {...field}
-                  disabled={isLoading}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+          control={form.control}
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor="form-rhf-demo-email">Email</FieldLabel>
+              <Input
+                {...field}
+                id="form-rhf-demo-email"
+                aria-invalid={fieldState.invalid}
+                autoComplete="off"
+              />
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
           )}
         />
-
-        <FormField
-          control={form.control}
+        <Controller
           name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Create a password"
-                  {...field}
-                  disabled={isLoading}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
           control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Confirm your password"
-                  {...field}
-                  disabled={isLoading}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor="form-password-input">Password</FieldLabel>
+              <Input
+                {...field}
+                id="form-password-input"
+                aria-invalid={fieldState.invalid}
+                type="password"
+                autoComplete="off"
+              />
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
           )}
         />
-
-        {error && <div className="text-sm text-red-500">{error}</div>}
-
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Creating account..." : "Sign up"}
+        <Controller
+          name="confirmPassword"
+          control={form.control}
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor="form-confirm-password-input">
+                Confirm Password
+              </FieldLabel>
+              <Input
+                {...field}
+                id="form-confirm-password-input"
+                aria-invalid={fieldState.invalid}
+                type="password"
+                autoComplete="off"
+              />
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
+          )}
+        />
+      </FieldGroup>
+      <FieldGroup className="mt-8">
+        <Button type="submit" form="form-rhf-demo">
+          {isLoading ? "Signing up..." : "Sign up"}
         </Button>
-      </form>
-    </Form>
+      </FieldGroup>
+    </form>
   );
 };

@@ -1,120 +1,108 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { authClient } from "@/lib/auth-client";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Controller, useForm } from "react-hook-form";
+import { toast } from "sonner";
+import * as z from "zod";
+
 import { Button } from "@/components/ui/button";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+
+import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useState } from "react";
 
-type LoginFormData = {
-  email: string;
-  password: string;
-};
+const formSchema = z.object({
+  email: z.email("Please enter a valid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters long"),
+});
 
-type LoginFormProps = {
-  redirectTo?: string;
-};
-
-export const LoginForm = ({ redirectTo }: LoginFormProps) => {
+export const LoginForm = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const form = useForm<LoginFormData>({
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       email: "",
       password: "",
     },
   });
 
-  const onSubmit = async (data: LoginFormData) => {
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
     setIsLoading(true);
-    setError(null);
 
-    try {
-      const response = await authClient.signIn.email({
+    await authClient.signIn.email(
+      {
         email: data.email,
         password: data.password,
-      });
-
-      if (response.error) {
-        setError(response.error.message || "Failed to sign in");
-        toast.error(response.error.message || "Failed to sign in");
-        setIsLoading(false);
-        return;
-      }
-
-      toast.success("Successfully signed in!");
-      // Redirect to dashboard or home page after successful login
-      router.push(redirectTo || "/dashboard");
-      router.refresh();
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to sign in";
-      setError(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
+      },
+      {
+        onRequest: () => {
+          setIsLoading(true);
+        },
+        onSuccess: () => {
+          setIsLoading(false);
+          toast.success("Successfully signed in!");
+          router.push("/dashboard");
+          router.refresh();
+        },
+        onError: (ctx) => {
+          setIsLoading(false);
+          toast.error(ctx.error.message || "Failed to sign in");
+        },
+      },
+    );
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <FormField
-          control={form.control}
+    <form id="form-rhf-demo" onSubmit={form.handleSubmit(onSubmit)}>
+      <FieldGroup>
+        <Controller
           name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input
-                  type="email"
-                  placeholder="Enter your email"
-                  {...field}
-                  disabled={isLoading}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
           control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <Input
-                  type="password"
-                  placeholder="Enter your password"
-                  {...field}
-                  disabled={isLoading}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor="form-rhf-demo-email">Email</FieldLabel>
+              <Input
+                {...field}
+                id="form-rhf-demo-email"
+                aria-invalid={fieldState.invalid}
+                autoComplete="off"
+              />
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
           )}
         />
-
-        {error && <div className="text-sm text-red-500">{error}</div>}
-
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Controller
+          name="password"
+          control={form.control}
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor="form-password-input">Password</FieldLabel>
+              <Input
+                {...field}
+                id="form-password-input"
+                aria-invalid={fieldState.invalid}
+                type="password"
+                autoComplete="off"
+              />
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
+          )}
+        />
+      </FieldGroup>
+      <FieldGroup className="mt-8">
+        <Button type="submit" form="form-rhf-demo">
           {isLoading ? "Signing in..." : "Sign in"}
         </Button>
-      </form>
-    </Form>
+      </FieldGroup>
+    </form>
   );
 };
