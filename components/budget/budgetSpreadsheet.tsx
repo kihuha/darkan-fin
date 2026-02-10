@@ -11,9 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Save, Download } from "lucide-react";
+import { Save } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 
 interface CategoryBudgetItem {
   category_id: string;
@@ -39,7 +38,7 @@ export function BudgetSpreadsheet({
   onSave,
 }: BudgetSpreadsheetProps) {
   const [budgetItems, setBudgetItems] = useState<Map<string, number>>(
-    new Map()
+    new Map(),
   );
   const [isSaving, setIsSaving] = useState(false);
 
@@ -65,7 +64,7 @@ export function BudgetSpreadsheet({
         ([category_id, amount]) => ({
           category_id,
           amount,
-        })
+        }),
       );
 
       const response = await fetch("/api/budget", {
@@ -99,10 +98,10 @@ export function BudgetSpreadsheet({
 
   // Separate categories into income and expenses based on type
   const incomeCategories = categories.filter(
-    (cat) => cat.category_type === "income"
+    (cat) => cat.category_type === "income",
   );
   const expenseCategories = categories.filter(
-    (cat) => cat.category_type === "expense"
+    (cat) => cat.category_type === "expense",
   );
 
   const calculateTotal = (cats: CategoryBudgetItem[]) => {
@@ -112,80 +111,10 @@ export function BudgetSpreadsheet({
     }, 0);
   };
 
-  const handleDownload = () => {
-    try {
-      const MONTHS = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-      ];
-
-      // Prepare data for export
-      const incomeData = incomeCategories.map((cat) => ({
-        Category: cat.category_name,
-        "Budget Amount": budgetItems.get(cat.category_id) || 0,
-      }));
-
-      const expenseData = expenseCategories.map((cat) => ({
-        Category: cat.category_name,
-        "Budget Amount": budgetItems.get(cat.category_id) || 0,
-      }));
-
-      // Create workbook
-      const wb = XLSX.utils.book_new();
-
-      // Add income sheet
-      if (incomeData.length > 0) {
-        const incomeSheet = XLSX.utils.json_to_sheet(incomeData);
-        XLSX.utils.book_append_sheet(wb, incomeSheet, "Income");
-      }
-
-      // Add expense sheet
-      if (expenseData.length > 0) {
-        const expenseSheet = XLSX.utils.json_to_sheet(expenseData);
-        XLSX.utils.book_append_sheet(wb, expenseSheet, "Expenses");
-      }
-
-      // Calculate totals before creating summary sheet
-      const totalIncome = calculateTotal(incomeCategories);
-      const totalExpenses = calculateTotal(expenseCategories);
-      const netAmount = totalIncome - totalExpenses;
-
-      // Add summary sheet
-      const summaryData = [
-        { Metric: "Total Income", Amount: totalIncome },
-        { Metric: "Total Expenses", Amount: totalExpenses },
-        { Metric: "Net Amount", Amount: netAmount },
-      ];
-      const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
-
-      // Generate filename
-      const monthName = MONTHS[month - 1];
-      const filename = `Budget_${monthName}_${year}.xlsx`;
-
-      // Download file
-      XLSX.writeFile(wb, filename);
-      toast.success("Budget downloaded successfully");
-    } catch (error) {
-      console.error("Error downloading budget:", error);
-      toast.error("Failed to download budget");
-    }
-  };
-
   const renderCategoryTable = (
     title: string,
     cats: CategoryBudgetItem[],
-    emptyMessage: string
+    emptyMessage: string,
   ) => (
     <div className="space-y-2">
       <h3 className="text-lg font-semibold">{title}</h3>
@@ -232,7 +161,7 @@ export function BudgetSpreadsheet({
                           onChange={(e) =>
                             handleAmountChange(
                               category.category_id,
-                              e.target.value
+                              e.target.value,
                             )
                           }
                         />
@@ -263,7 +192,7 @@ export function BudgetSpreadsheet({
 
   return (
     <div className="space-y-6">
-      <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-4 flex gap-x-4 items-center justify-between">
         <div className="space-y-1">
           <div className="text-sm text-muted-foreground">
             Net Amount:{" "}
@@ -279,33 +208,6 @@ export function BudgetSpreadsheet({
             </span>
           </div>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <Button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="w-full sm:w-auto"
-          >
-            {isSaving ? (
-              <>
-                <Save className="mr-2 h-4 w-4 animate-pulse" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Save Budget
-              </>
-            )}
-          </Button>
-          <Button
-            onClick={handleDownload}
-            variant="outline"
-            className="w-full sm:w-auto"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Download XLSX
-          </Button>
-        </div>
       </div>
 
       {categories.length === 0 ? (
@@ -317,15 +219,32 @@ export function BudgetSpreadsheet({
           {renderCategoryTable(
             "Income",
             incomeCategories,
-            "No income categories. Create an income category first."
+            "No income categories. Create an income category first.",
           )}
           {renderCategoryTable(
             "Expenses",
             expenseCategories,
-            "No expense categories. Create an expense category first."
+            "No expense categories. Create an expense category first.",
           )}
         </>
       )}
+      <Button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="w-full md:w-auto"
+      >
+        {isSaving ? (
+          <>
+            <Save className="mr-2 h-4 w-4 animate-pulse" />
+            Saving...
+          </>
+        ) : (
+          <>
+            <Save className="mr-2 h-4 w-4" />
+            Save Budget
+          </>
+        )}
+      </Button>
     </div>
   );
 }

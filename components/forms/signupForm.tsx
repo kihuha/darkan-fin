@@ -32,7 +32,7 @@ const formSchema = z
     path: ["confirmPassword"],
   });
 
-export const SignupForm = () => {
+export const SignupForm = ({ redirectTo }: { redirectTo?: string }) => {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -62,7 +62,7 @@ export const SignupForm = () => {
         onSuccess: () => {
           setIsLoading(false);
           toast.success("Successfully signed up!");
-          router.push("/dashboard");
+          router.push(redirectTo || "/dashboard");
           router.refresh();
         },
         onError: (ctx) => {

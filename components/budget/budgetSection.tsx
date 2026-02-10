@@ -8,10 +8,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BudgetSpreadsheet } from "./budgetSpreadsheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { Header } from "../header";
 
 interface BudgetData {
   id: string;
@@ -60,7 +60,7 @@ export const BudgetSection = () => {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `/api/budget?month=${selectedMonth}&year=${selectedYear}`
+        `/api/budget?month=${selectedMonth}&year=${selectedYear}`,
       );
       const result = await response.json();
 
@@ -81,75 +81,65 @@ export const BudgetSection = () => {
     fetchBudget();
   }, [fetchBudget]);
 
+  const monthOptions = MONTHS.map((month, index) => ({
+    label: month,
+    value: index + 1,
+  }));
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Budget
-        </h2>
-        <p className="text-sm text-muted-foreground sm:text-base">
-          Plan your monthly budget by allocating amounts to categories
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="w-full sm:w-52">
-          <Select
-            value={selectedYear.toString()}
-            onValueChange={(value) => setSelectedYear(parseInt(value))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select year" />
-            </SelectTrigger>
-            <SelectContent>
-              {yearOptions.map((year) => (
-                <SelectItem key={year} value={year.toString()}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <Tabs
-        value={selectedMonth.toString()}
-        onValueChange={(value) => setSelectedMonth(parseInt(value))}
-      >
-        <TabsList className="h-auto w-full flex-nowrap gap-2 overflow-x-auto  border border-border/70 bg-white/70 p-2 shadow-sm backdrop-blur">
-          {MONTHS.map((month, index) => (
-            <TabsTrigger
-              key={month}
-              value={(index + 1).toString()}
-              className="flex-none px-3 py-1.5"
+    <div>
+      <Header
+        label="Budget"
+        actions={
+          <div className="flex items-center gap-4">
+            <Select
+              value={selectedYear.toString()}
+              onValueChange={(value) => setSelectedYear(parseInt(value))}
             >
-              {month.slice(0, 3)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        {MONTHS.map((month, index) => (
-          <TabsContent
-            key={month}
-            value={(index + 1).toString()}
-            className="mt-4"
-          >
-            {isLoading ? (
-              <div className="space-y-4">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-64 w-full" />
-              </div>
-            ) : budgetData ? (
-              <BudgetSpreadsheet
-                month={selectedMonth}
-                year={selectedYear}
-                categories={budgetData.categories || []}
-                onSave={fetchBudget}
-              />
-            ) : null}
-          </TabsContent>
-        ))}
-      </Tabs>
+            <Select
+              value={selectedMonth.toString()}
+              onValueChange={(value) => setSelectedMonth(parseInt(value))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((month) => (
+                  <SelectItem key={month.value} value={month.value.toString()}>
+                    {month.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        }
+      />
+
+      {isLoading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      ) : budgetData ? (
+        <BudgetSpreadsheet
+          month={selectedMonth}
+          year={selectedYear}
+          categories={budgetData.categories || []}
+          onSave={fetchBudget}
+        />
+      ) : null}
     </div>
   );
 };

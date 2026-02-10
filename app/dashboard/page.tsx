@@ -23,7 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, MONTHS } from "@/lib/utils";
 import { Transaction } from "@/lib/validations/transaction";
 import { Header } from "@/components/header";
 
@@ -50,21 +50,6 @@ type BudgetOverview = {
   percentage: number;
   isOverBudget: boolean;
 };
-
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
 
 export default function DashboardPage() {
   const currentDate = new Date();
