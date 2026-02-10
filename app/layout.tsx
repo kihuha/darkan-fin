@@ -25,8 +25,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${figtree.variable} ${geistMono.variable}`}>
-      <body className="font-sans antialiased">
+    <html
+      lang="en"
+      className={`${figtree.variable} ${geistMono.variable} h-full bg-gray-900`}
+    >
+      <body className="font-sans antialiased h-full">
         <TooltipProvider>{children}</TooltipProvider>
 
         <Toaster />

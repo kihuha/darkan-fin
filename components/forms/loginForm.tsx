@@ -23,7 +23,7 @@ const formSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters long"),
 });
 
-export const LoginForm = () => {
+export const LoginForm = ({ redirectTo }: { redirectTo?: string }) => {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -50,7 +50,11 @@ export const LoginForm = () => {
         onSuccess: () => {
           setIsLoading(false);
           toast.success("Successfully signed in!");
-          router.push("/dashboard");
+          if (redirectTo) {
+            router.push(redirectTo);
+          } else {
+            router.push("/dashboard");
+          }
           router.refresh();
         },
         onError: (ctx) => {

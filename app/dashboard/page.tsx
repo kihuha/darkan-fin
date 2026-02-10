@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import {
   Select,
   SelectContent,
@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Transaction } from "@/lib/validations/transaction";
+import { Header } from "@/components/header";
 
 type TransactionWithCategory = Transaction & {
   category_name: string;
@@ -76,11 +77,15 @@ export default function DashboardPage() {
   const [totalBudget, setTotalBudget] = useState(0);
   const [totalSpent, setTotalSpent] = useState(0);
 
-  // Generate year options (current year and 2 years back)
   const yearOptions = Array.from(
     { length: 3 },
     (_, i) => currentDate.getFullYear() - i,
   );
+
+  const monthOptions = MONTHS.map((month, index) => ({
+    label: month,
+    value: index + 1,
+  }));
 
   const fetchBudgetOverview = useCallback(async () => {
     try {
@@ -174,48 +179,44 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-up">
-      <div className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">
-          Overview
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Budget Overview
-        </h1>
-      </div>
+      <Header
+        label="Dashboard"
+        actions={
+          <div className="flex items-center gap-4">
+            <Select
+              value={selectedYear.toString()}
+              onValueChange={(value) => setSelectedYear(parseInt(value))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-      {/* Year Selector */}
-      <div className="flex items-center gap-4">
-        <Select
-          value={selectedYear.toString()}
-          onValueChange={(value) => setSelectedYear(parseInt(value))}
-        >
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {yearOptions.map((year) => (
-              <SelectItem key={year} value={year.toString()}>
-                {year}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Month Tabs */}
-      <Tabs
-        value={selectedMonth.toString()}
-        onValueChange={(value) => setSelectedMonth(parseInt(value))}
-        className="w-full"
-      >
-        <TabsList className="w-full flex-wrap h-auto">
-          {MONTHS.map((month, index) => (
-            <TabsTrigger key={index + 1} value={(index + 1).toString()}>
-              {month}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+            <Select
+              value={selectedMonth.toString()}
+              onValueChange={(value) => setSelectedMonth(parseInt(value))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((month) => (
+                  <SelectItem key={month.value} value={month.value.toString()}>
+                    {month.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        }
+      />
 
       {/* Summary Cards */}
       {isLoading ? (
