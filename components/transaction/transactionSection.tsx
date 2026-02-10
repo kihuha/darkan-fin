@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { type Transaction } from "@/lib/validations/transaction";
+import { useCallback, useEffect, useState } from "react";
 import { TransactionTable } from "./transactionTable";
 import { TransactionForm } from "../forms/transactionForm";
 import { MpesaImportDialog } from "./mpesaImportDialog";
@@ -35,14 +34,32 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { TransactionFilters } from "./transactionFilters";
 
-type TransactionWithCategory = Transaction & {
+type Transaction = {
+  id: number;
+  amount: number;
+  description: string;
+  transaction_date: string;
+  category_id: number;
+  family_id: number;
+};
+export type TransactionWithCategory = Transaction & {
   category_name: string;
   category_type: "income" | "expense";
 };
@@ -62,16 +79,21 @@ export const TransactionSection = () => {
     string | null
   >(null);
 
-  const fetchTransactions = async () => {
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [totalPages, setTotalPages] = useState(0);
+
+  const fetchTransactions = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/transaction");
+      const response = await fetch(
+        `/api/transaction?page=${page}&rowsPerPage=${rowsPerPage}`,
+      );
       const result = await response.json();
 
       if (result.success) {
         setTransactions(result.data);
-      } else {
-        toast.error("Failed to load transactions");
+        setTotalPages(result.pagination.totalPages);
       }
     } catch (error) {
       console.error("Error fetching transactions:", error);
@@ -79,11 +101,11 @@ export const TransactionSection = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [page, rowsPerPage]);
 
   useEffect(() => {
     fetchTransactions();
-  }, []);
+  }, [page, rowsPerPage, fetchTransactions]);
 
   const handleEdit = (transaction: TransactionWithCategory) => {
     setSelectedTransaction(transaction);
@@ -232,39 +254,15 @@ export const TransactionSection = () => {
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <Select
-            value={selectedCategoryFilter || "all"}
-            onValueChange={(value) =>
-              setSelectedCategoryFilter(value === "all" ? null : value)
-            }
-          >
-            <SelectTrigger className="w-full sm:w-auto">
-              <SelectValue placeholder="Filter by category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {uniqueCategories.map((category) => (
-                <SelectItem key={category} value={category}>
-                  {category}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            onClick={handleRecategorize}
-            disabled={isRecategorizing}
-            className="w-full sm:w-auto"
-          >
-            {isRecategorizing
-              ? "Recategorizing..."
-              : "Recategorize Transactions"}
-          </Button>
-          <MpesaImportDialog
+          <TransactionFilters
+            categories={uniqueCategories}
+            selectedCategory={selectedCategoryFilter}
+            onCategoryChange={setSelectedCategoryFilter}
+            onRecategorize={handleRecategorize}
+            isRecategorizing={isRecategorizing}
             onImported={fetchTransactions}
-            triggerClassName="w-full sm:w-auto"
-            triggerVariant="outline"
           />
+
           <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto">
@@ -328,12 +326,76 @@ export const TransactionSection = () => {
           </EmptyHeader>
         </Empty>
       ) : (
-        <TransactionTable
-          transactions={filteredTransactions}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onCategoryChange={handleCategoryChange}
-        />
+        <>
+          <div className="flex items-center justify-between gap-4">
+            <TransactionTable
+              transactions={filteredTransactions}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onCategoryChange={handleCategoryChange}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <Field orientation="horizontal" className="w-fit">
+              <FieldLabel htmlFor="select-rows-per-page">
+                Rows per page
+              </FieldLabel>
+              <Select
+                value={rowsPerPage.toString()}
+                onValueChange={(value) => {
+                  setRowsPerPage(parseInt(value));
+                  setPage(0);
+                }}
+              >
+                <SelectTrigger className="w-20" id="select-rows-per-page">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  <SelectGroup>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                Page {page + 1} of {totalPages || 1}
+              </span>
+              <Pagination className="mx-0 w-auto">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (page > 0) setPage(page - 1);
+                      }}
+                      className={
+                        page === 0
+                          ? "pointer-events-none opacity-50"
+                          : "cursor-pointer"
+                      }
+                    />
+                  </PaginationItem>
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (page < totalPages - 1) setPage(page + 1);
+                      }}
+                      className={
+                        page >= totalPages - 1
+                          ? "pointer-events-none opacity-50"
+                          : "cursor-pointer"
+                      }
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          </div>
+        </>
       )}
 
       <AlertDialog

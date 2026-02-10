@@ -23,6 +23,5 @@ export const updateTransactionSchema = transactionSchema
   .required({ id: true })
   .omit({ userId: true });
 
-export type Transaction = z.infer<typeof transactionSchema>;
 export type CreateTransaction = z.infer<typeof createTransactionSchema>;
 export type UpdateTransaction = z.infer<typeof updateTransactionSchema>;

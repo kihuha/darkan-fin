@@ -27,7 +27,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${figtree.variable} ${geistMono.variable} h-full bg-gray-900`}
+      className={`${figtree.variable} ${geistMono.variable} min-h-full`}
     >
       <body className="font-sans antialiased h-full">
         <TooltipProvider>{children}</TooltipProvider>

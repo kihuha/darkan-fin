@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type Transaction } from "@/lib/validations/transaction";
+
 import { type Category } from "@/lib/validations/category";
 import {
   Table,
@@ -29,24 +29,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { format } from "date-fns";
+import { TransactionWithCategory } from "./transactionSection";
 
 interface TransactionTableProps {
-  transactions: (Transaction & {
-    category_name: string;
-    category_type: "income" | "expense";
-  })[];
-  onEdit: (
-    transaction: Transaction & {
-      category_name: string;
-      category_type: "income" | "expense";
-    },
-  ) => void;
-  onDelete: (
-    transaction: Transaction & {
-      category_name: string;
-      category_type: "income" | "expense";
-    },
-  ) => void;
+  transactions: TransactionWithCategory[];
+  onEdit: (transaction: TransactionWithCategory) => void;
+
+  onDelete: (transaction: TransactionWithCategory) => void;
   onCategoryChange?: (
     transactionId: string,
     categoryId: string,
@@ -98,7 +87,7 @@ export function TransactionTable({
   };
 
   return (
-    <div className=" border border-white/60 bg-white/70 shadow-sm backdrop-blur">
+    <div className="w-full border border-white/60 bg-white/70 shadow-sm backdrop-blur">
       <div className="overflow-x-auto">
         <Table className="min-w-190">
           <TableHeader>
@@ -131,18 +120,22 @@ export function TransactionTable({
               >
                 <TableCell className="font-medium whitespace-nowrap">
                   {format(
-                    new Date(transaction.transactionDate),
+                    new Date(transaction.transaction_date),
                     "MMM dd, yyyy",
                   )}
                 </TableCell>
                 <TableCell>
                   <Select
-                    value={transaction.categoryId || ""}
+                    value={transaction.category_id.toString() || ""}
                     onValueChange={(categoryId) =>
-                      handleCategoryChange(transaction.id!, categoryId)
+                      handleCategoryChange(
+                        transaction.id!.toString(),
+                        categoryId,
+                      )
                     }
                     disabled={
-                      updatingId === transaction.id || isLoadingCategories
+                      updatingId === transaction.id!.toString() ||
+                      isLoadingCategories
                     }
                   >
                     <SelectTrigger className="w-40">
