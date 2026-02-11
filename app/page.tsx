@@ -23,10 +23,16 @@ export default async function LoginPage(props: {
           <div className="flex items-center gap-3">
             <Logo />
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+              <p
+                className="text-xs uppercase tracking-[0.3em] text-muted-foreground"
+                data-testid="logo-subtitle"
+              >
                 Darkan Fin
               </p>
-              <p className="text-sm text-muted-foreground">
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="logo-description"
+              >
                 Calm clarity for your cashflow
               </p>
             </div>

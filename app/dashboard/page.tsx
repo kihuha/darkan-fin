@@ -108,7 +108,8 @@ export default function DashboardPage() {
         return;
       }
 
-      const transactions: TransactionWithCategory[] = transactionResult.data.rows;
+      const transactions: TransactionWithCategory[] =
+        transactionResult.data.rows;
 
       // Calculate spending per category
       const spendingByCategory = transactions
