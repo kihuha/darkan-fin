@@ -25,6 +25,7 @@ import { TransactionWithCategory } from "./transactionSection";
 interface TransactionTableProps {
   transactions: TransactionWithCategory[];
   onEdit: (transaction: TransactionWithCategory) => void;
+  showDateColumn?: boolean;
   onCategoryChange?: (
     transactionId: string,
     categoryId: string,
@@ -34,6 +35,7 @@ interface TransactionTableProps {
 export function TransactionTable({
   transactions,
   onEdit,
+  showDateColumn = true,
   onCategoryChange,
 }: TransactionTableProps) {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -80,9 +82,11 @@ export function TransactionTable({
         <Table className="min-w-190">
           <TableHeader>
             <TableRow className="bg-muted/40">
-              <TableHead className="text-xs md:text-sm font-semibold tracking-wide text-muted-foreground">
-                Date
-              </TableHead>
+              {showDateColumn && (
+                <TableHead className="text-xs md:text-sm font-semibold tracking-wide text-muted-foreground">
+                  Date
+                </TableHead>
+              )}
               <TableHead className="text-xs md:text-sm font-semibold tracking-wide text-muted-foreground">
                 Category
               </TableHead>
@@ -102,12 +106,14 @@ export function TransactionTable({
                 key={transaction.id}
                 className="cursor-pointer hover:bg-muted/50"
               >
-                <TableCell className="font-medium whitespace-nowrap">
-                  {format(
-                    new Date(transaction.transaction_date),
-                    "MMM dd, yyyy",
-                  )}
-                </TableCell>
+                {showDateColumn && (
+                  <TableCell className="font-medium whitespace-nowrap">
+                    {format(
+                      new Date(transaction.transaction_date),
+                      "MMM dd, yyyy",
+                    )}
+                  </TableCell>
+                )}
                 <TableCell>
                   <Select
                     value={transaction.category_id.toString() || ""}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { format } from "date-fns";
 import { TransactionTable } from "./transactionTable";
 import { TransactionForm } from "../forms/transactionForm";
 import { MpesaImportDialog } from "./mpesaImportDialog";
@@ -31,24 +32,8 @@ import {
   EmptyContent,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { Field, FieldLabel } from "@/components/ui/field";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { TransactionFilters } from "./transactionFilters";
 
 type Transaction = {
@@ -78,22 +63,28 @@ export const TransactionSection = () => {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<
     string | null
   >(null);
-
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(20);
-  const [totalPages, setTotalPages] = useState(0);
+  const [selectedMonth, setSelectedMonth] = useState(
+    () => new Date().getMonth() + 1,
+  );
+  const [selectedYear, setSelectedYear] = useState(() =>
+    new Date().getFullYear(),
+  );
 
   const fetchTransactions = useCallback(async () => {
     try {
       setIsLoading(true);
+      const searchParams = new URLSearchParams({
+        month: selectedMonth.toString(),
+        year: selectedYear.toString(),
+      });
+
       const response = await fetch(
-        `/api/transaction?page=${page}&rows_per_page=${rowsPerPage}`,
+        `/api/transaction?${searchParams.toString()}`,
       );
       const result = await response.json();
 
       if (response.ok && result.success) {
         setTransactions(result.data.rows);
-        setTotalPages(result.data.pagination.total_pages);
       } else {
         toast.error(result.error || "Failed to load transactions");
       }
@@ -103,11 +94,11 @@ export const TransactionSection = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, rowsPerPage]);
+  }, [selectedMonth, selectedYear]);
 
   useEffect(() => {
     fetchTransactions();
-  }, [page, rowsPerPage, fetchTransactions]);
+  }, [selectedMonth, selectedYear, fetchTransactions]);
 
   const handleEdit = (transaction: TransactionWithCategory) => {
     setSelectedTransaction(transaction);
@@ -227,6 +218,23 @@ export const TransactionSection = () => {
       ? transactions
       : transactions.filter((t) => t.category_name === selectedCategoryFilter);
 
+  // Group transactions by day
+  const groupedTransactions = Object.entries(
+    filteredTransactions.reduce<Record<string, TransactionWithCategory[]>>(
+      (groups, transaction) => {
+        const dateKey = transaction.transaction_date.split("T")[0];
+
+        if (!groups[dateKey]) {
+          groups[dateKey] = [];
+        }
+
+        groups[dateKey].push(transaction);
+        return groups;
+      },
+      {},
+    ),
+  ).sort(([left], [right]) => right.localeCompare(left));
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -260,6 +268,10 @@ export const TransactionSection = () => {
             categories={uniqueCategories}
             selectedCategory={selectedCategoryFilter}
             onCategoryChange={setSelectedCategoryFilter}
+            selectedMonth={selectedMonth}
+            selectedYear={selectedYear}
+            onMonthChange={setSelectedMonth}
+            onYearChange={setSelectedYear}
             onRecategorize={handleRecategorize}
             isRecategorizing={isRecategorizing}
             onImported={fetchTransactions}
@@ -297,9 +309,9 @@ export const TransactionSection = () => {
       {transactions.length === 0 ? (
         <Empty>
           <EmptyHeader>
-            <EmptyTitle>No transactions yet</EmptyTitle>
+            <EmptyTitle>No transactions in this period</EmptyTitle>
             <EmptyDescription>
-              Start tracking your finances by adding your first transaction
+              Try selecting a different month or year, or add a new transaction
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -311,7 +323,7 @@ export const TransactionSection = () => {
               />
               <Button
                 onClick={() => setIsDialogOpen(true)}
-                className="w-full sm:w-auto"
+                className="hidden w-full md:w-auto"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Transaction
@@ -329,75 +341,26 @@ export const TransactionSection = () => {
           </EmptyHeader>
         </Empty>
       ) : (
-        <>
-          <div className="flex items-center justify-between gap-4">
-            <TransactionTable
-              transactions={filteredTransactions}
-              onEdit={handleEdit}
-              onCategoryChange={handleCategoryChange}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <Field orientation="horizontal" className="w-fit">
-              <FieldLabel htmlFor="select-rows-per-page">
-                Rows per page
-              </FieldLabel>
-              <Select
-                value={rowsPerPage.toString()}
-                onValueChange={(value) => {
-                  setRowsPerPage(parseInt(value));
-                  setPage(0);
-                }}
-              >
-                <SelectTrigger className="w-20" id="select-rows-per-page">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="start">
-                  <SelectGroup>
-                    <SelectItem value="10">10</SelectItem>
-                    <SelectItem value="20">20</SelectItem>
-                    <SelectItem value="50">50</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">
-                Page {page + 1} of {totalPages || 1}
-              </span>
-              <Pagination className="mx-0 w-auto">
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (page > 0) setPage(page - 1);
-                      }}
-                      className={
-                        page === 0
-                          ? "pointer-events-none opacity-50"
-                          : "cursor-pointer"
-                      }
-                    />
-                  </PaginationItem>
-                  <PaginationItem>
-                    <PaginationNext
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (page < totalPages - 1) setPage(page + 1);
-                      }}
-                      className={
-                        page >= totalPages - 1
-                          ? "pointer-events-none opacity-50"
-                          : "cursor-pointer"
-                      }
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </div>
-          </div>
-        </>
+        <div className="space-y-5">
+          {groupedTransactions.map(([dateKey, dayTransactions]) => {
+            const [year, month, day] = dateKey.split("-").map(Number);
+            const dayDate = new Date(year, month - 1, day);
+
+            return (
+              <section key={dateKey} className="space-y-2">
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  {format(dayDate, "EEEE, MMM d, yyyy")}
+                </h3>
+                <TransactionTable
+                  transactions={dayTransactions}
+                  onEdit={handleEdit}
+                  onCategoryChange={handleCategoryChange}
+                  showDateColumn={false}
+                />
+              </section>
+            );
+          })}
+        </div>
       )}
 
       <AlertDialog

@@ -17,6 +17,7 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
+import { Separator } from "./ui/separator";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard" },
@@ -132,10 +133,7 @@ export const ContentWrapper = ({
                     )}
                   </Button>
                 </SheetTrigger>
-                <SheetContent
-                  side="right"
-                  className="bg-gray-800 border-white/10 w-64"
-                >
+                <SheetContent side="right" className="w-64">
                   <div className="space-y-1 px-2 pt-2 pb-3">
                     {navigation.map((item) => (
                       <a
@@ -150,8 +148,8 @@ export const ContentWrapper = ({
                         className={cn(
                           navigation.find((navItem) => navItem.href === path)
                             ?.name === item.name
-                            ? "bg-gray-950/50 text-white"
-                            : "text-gray-300 hover:bg-white/5 hover:text-white",
+                            ? "bg-primary text-white"
+                            : "",
                           "block rounded-md px-3 py-2 text-base font-medium transition-colors",
                         )}
                         onClick={() => setOpen(false)}
@@ -170,16 +168,21 @@ export const ContentWrapper = ({
                         <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                       </Avatar>
                       <div className="ml-3">
-                        <div className="text-base font-medium text-white">
+                        <div className="text-base font-medium ">
                           {user.name}
                         </div>
-                        <div className="text-sm font-medium text-gray-400">
-                          {user.email}
-                        </div>
+                        <div className="text-sm font-medium ">{user.email}</div>
                       </div>
                     </div>
+                    <Separator className="my-4" />
                     <div className="mt-3 space-y-1 px-2">
-                      <Button onClick={() => handleSignOut()}>Sign Out</Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleSignOut()}
+                        className="w-full"
+                      >
+                        Sign Out
+                      </Button>
                     </div>
                   </div>
                 </SheetContent>
@@ -190,7 +193,7 @@ export const ContentWrapper = ({
       </nav>
 
       <main>
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 md:py-6 sm:px-6 lg:px-8">
           {children}
         </div>
       </main>
