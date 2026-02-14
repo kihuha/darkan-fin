@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import z from "zod";
+import { TransactionWithCategory } from "../transaction/transactionSection";
 
 interface TransactionFormProps {
   transaction?: {
@@ -42,12 +43,14 @@ interface TransactionFormProps {
   } | null;
   onSuccess?: () => void;
   onCancel?: () => void;
+  onDelete?: (transaction: TransactionWithCategory) => void;
 }
 
 export function TransactionForm({
   transaction,
   onSuccess,
   onCancel,
+  onDelete,
 }: TransactionFormProps) {
   const isEditing = !!transaction?.id;
   const [categories, setCategories] = useState<Category[]>([]);
@@ -260,18 +263,33 @@ export function TransactionForm({
           )}
         />
 
-        <div className="flex justify-end gap-2">
-          {onCancel && (
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancel
+        <div className="flex justify-between gap-2">
+          {onDelete && isEditing && (
+            <Button
+              type="button"
+              variant="destructive"
+              className="mr-2"
+              onClick={() => {
+                onDelete(transaction as TransactionWithCategory);
+              }}
+            >
+              Delete
             </Button>
           )}
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+
+          <div className="flex items-center gap-x-2">
+            {onCancel && (
+              <Button type="button" variant="outline" onClick={onCancel}>
+                Cancel
+              </Button>
             )}
-            {isEditing ? "Update" : "Create"} Transaction
-          </Button>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              {isEditing ? "Update" : "Create"} Transaction
+            </Button>
+          </div>
         </div>
       </form>
     </Form>

@@ -12,15 +12,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Edit2, MoreHorizontal, Trash2 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -34,8 +25,6 @@ import { TransactionWithCategory } from "./transactionSection";
 interface TransactionTableProps {
   transactions: TransactionWithCategory[];
   onEdit: (transaction: TransactionWithCategory) => void;
-
-  onDelete: (transaction: TransactionWithCategory) => void;
   onCategoryChange?: (
     transactionId: string,
     categoryId: string,
@@ -45,7 +34,6 @@ interface TransactionTableProps {
 export function TransactionTable({
   transactions,
   onEdit,
-  onDelete,
   onCategoryChange,
 }: TransactionTableProps) {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -87,29 +75,25 @@ export function TransactionTable({
   };
 
   return (
-    <div className="w-full border border-white/60 bg-white/70 shadow-sm backdrop-blur">
+    <div className="w-full ">
       <div className="overflow-x-auto">
         <Table className="min-w-190">
           <TableHeader>
             <TableRow className="bg-muted/40">
-              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+              <TableHead className="text-xs md:text-sm font-semibold tracking-wide text-muted-foreground">
                 Date
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+              <TableHead className="text-xs md:text-sm font-semibold tracking-wide text-muted-foreground">
                 Category
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
-                Type
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+
+              <TableHead className="text-xs md:text-sm font-semibold tracking-wide text-muted-foreground">
                 Amount
               </TableHead>
-              <TableHead className="text-xs uppercase tracking-wide text-muted-foreground">
+              <TableHead className="text-xs md:text-sm font-semibold tracking-wide text-muted-foreground">
                 Description
               </TableHead>
-              <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground">
-                Actions
-              </TableHead>
+              <TableHead className="text-right text-xs md:text-sm font-semibold tracking-wide text-muted-foreground"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -153,19 +137,7 @@ export function TransactionTable({
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      transaction.category_type === "income"
-                        ? "default"
-                        : "secondary"
-                    }
-                  >
-                    {transaction.category_type === "income"
-                      ? "Income"
-                      : "Expense"}
-                  </Badge>
-                </TableCell>
+
                 <TableCell className="font-mono">
                   <span
                     className={
@@ -185,28 +157,9 @@ export function TransactionTable({
                   {transaction.description || "—"}
                 </TableCell>
                 <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Open menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => onEdit(transaction)}>
-                        <Edit2 className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => onDelete(transaction)}
-                        className="text-red-600 focus:text-red-600"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <Button variant="outline" onClick={() => onEdit(transaction)}>
+                    Edit
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}

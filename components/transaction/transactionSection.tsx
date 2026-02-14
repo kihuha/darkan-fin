@@ -116,6 +116,7 @@ export const TransactionSection = () => {
 
   const handleDelete = (transaction: TransactionWithCategory) => {
     setTransactionToDelete(transaction);
+    setIsDialogOpen(false);
   };
 
   const confirmDelete = async () => {
@@ -285,6 +286,7 @@ export const TransactionSection = () => {
               <TransactionForm
                 transaction={selectedTransaction}
                 onSuccess={handleSuccess}
+                onDelete={handleDelete}
                 onCancel={() => handleDialogChange(false)}
               />
             </DialogContent>
@@ -332,7 +334,6 @@ export const TransactionSection = () => {
             <TransactionTable
               transactions={filteredTransactions}
               onEdit={handleEdit}
-              onDelete={handleDelete}
               onCategoryChange={handleCategoryChange}
             />
           </div>

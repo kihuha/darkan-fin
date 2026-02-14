@@ -100,10 +100,12 @@ export const ContentWrapper = ({
 
                         <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                       </Avatar>
-                      <p className="text-muted-foreground">{user.name}</p>
+                      <p className="text-muted-foreground text-sm ml-1">
+                        {user.name}
+                      </p>
                     </div>
 
-                    <ChevronDown className="size-4 ml-2 text-gray-400" />
+                    <ChevronDown className="size-4 ml-1 text-gray-400" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-40" align="start">
