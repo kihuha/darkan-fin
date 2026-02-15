@@ -77,7 +77,7 @@ export function TransactionTable({
   };
 
   return (
-    <div className="w-full ">
+    <div className="w-full">
       <div className="overflow-x-auto">
         <Table className="min-w-190">
           <TableHeader>

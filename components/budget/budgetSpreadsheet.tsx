@@ -118,7 +118,7 @@ export function BudgetSpreadsheet({
   ) => (
     <div className="space-y-2">
       <h3 className="text-lg font-semibold">{title}</h3>
-      <div className=" border border-white/60 bg-white/70 shadow-sm backdrop-blur">
+      <div className=" border border-white/60 dark:border-white/10 bg-white/70 dark:bg-white/5 shadow-sm backdrop-blur">
         <div className="overflow-x-auto">
           <Table className="min-w-90">
             <TableHeader>
@@ -211,7 +211,7 @@ export function BudgetSpreadsheet({
       </div>
 
       {categories.length === 0 ? (
-        <div className=" border border-white/60 bg-white/70 p-8 text-center text-muted-foreground shadow-sm backdrop-blur">
+        <div className=" border border-white/60 p-8 text-center text-muted-foreground shadow-sm backdrop-blur">
           No categories available. Create categories first.
         </div>
       ) : (
