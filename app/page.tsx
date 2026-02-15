@@ -49,7 +49,7 @@ export default async function LoginPage(props: {
         </section>
 
         <section className="flex items-center animate-fade-up [animation-delay:120ms]">
-          <Card className="w-full bg-white/80 shadow-xl backdrop-blur">
+          <Card className="w-full shadow-xl backdrop-blur">
             <CardHeader>
               <CardTitle className="text-2xl">Welcome back</CardTitle>
               <CardDescription>

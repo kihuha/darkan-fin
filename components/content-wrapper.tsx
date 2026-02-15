@@ -18,6 +18,7 @@ import { usePathname } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import { Separator } from "./ui/separator";
+import { ModeToggle } from "./mode-toggle";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard" },
@@ -89,7 +90,8 @@ export const ContentWrapper = ({
                 </div>
               </div>
             </div>
-            <div className="hidden md:block">
+            <div className="hidden md:flex md:items-center md:gap-x-6">
+              <ModeToggle />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-x-4 border rounded-md ring-4 ring-white/10 px-3 py-2">
@@ -148,7 +150,7 @@ export const ContentWrapper = ({
                         className={cn(
                           navigation.find((navItem) => navItem.href === path)
                             ?.name === item.name
-                            ? "bg-primary text-white"
+                            ? "bg-primary text-white dark:bg-primary/30"
                             : "",
                           "block rounded-md px-3 py-2 text-base font-medium transition-colors",
                         )}

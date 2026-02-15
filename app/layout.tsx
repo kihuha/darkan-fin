@@ -3,6 +3,7 @@ import { Geist_Mono, Figtree } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const figtree = Figtree({
   variable: "--font-sans",
@@ -30,7 +31,16 @@ export default function RootLayout({
       className={`${figtree.variable} ${geistMono.variable} min-h-full`}
     >
       <body className="font-sans antialiased h-full">
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
+        </TooltipProvider>
 
         <Toaster />
       </body>
