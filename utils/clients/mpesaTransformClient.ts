@@ -33,12 +33,7 @@ export async function uploadStatementForTransform(
 
       const response = await fetch(`${api_base_url}/statements/upload-pdf`, {
         method: "POST",
-        headers: {
-          accept: "application/json",
-        },
         body: form_data,
-        cache: "no-store",
-        signal: controller.signal,
       });
 
       clearTimeout(timeout);
@@ -47,7 +42,11 @@ export async function uploadStatementForTransform(
         const response_body = await response.text();
 
         if (response.status === 400 || response.status === 422) {
-          throw new ApiError(422, "UPSTREAM_ERROR", "Statement parser rejected the file");
+          throw new ApiError(
+            422,
+            "UPSTREAM_ERROR",
+            "Statement parser rejected the file",
+          );
         }
 
         if (RETRYABLE_STATUS.has(response.status) && attempt < MAX_RETRIES) {
@@ -121,7 +120,11 @@ export async function uploadStatementForTransform(
         );
       }
 
-      throw new ApiError(502, "UPSTREAM_ERROR", "Statement parser request failed");
+      throw new ApiError(
+        502,
+        "UPSTREAM_ERROR",
+        "Statement parser request failed",
+      );
     }
   }
 

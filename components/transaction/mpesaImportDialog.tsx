@@ -79,9 +79,7 @@ export function MpesaImportDialog({
           skipped_duplicates_count
             ? `, skipped duplicates ${skipped_duplicates_count}`
             : ""
-        }${
-          errors_count ? `, discarded invalid rows ${errors_count}` : ""
-        }.`,
+        }${errors_count ? `, discarded invalid rows ${errors_count}` : ""}.`,
       );
 
       onImported?.();
