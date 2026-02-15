@@ -69,6 +69,7 @@ describe("mpesaTransformClient", () => {
     await expect(uploadStatementForTransform(file)).rejects.toMatchObject({
       status: 422,
       code: "UPSTREAM_ERROR",
+      message: "bad statement",
     } satisfies Partial<ApiError>);
   });
 
@@ -109,5 +110,37 @@ describe("mpesaTransformClient", () => {
       status: 502,
       code: "UPSTREAM_ERROR",
     } satisfies Partial<ApiError>);
+  });
+
+  it("normalizes PDF MIME type before forwarding upstream", async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce(
+      json_response([
+        {
+          ref: "ABC123",
+          time: "2026-02-01 12:00:00",
+          details: "Payment",
+          status: "SUCCESS",
+          money_in: "1000",
+          money_out: "0",
+        },
+      ]),
+    );
+
+    const file = new File(["pdf"], "statement.pdf", {
+      type: "",
+    });
+
+    await expect(uploadStatementForTransform(file)).resolves.toHaveLength(1);
+
+    const [, request_init] = (global.fetch as jest.Mock).mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    const form_data = request_init.body as FormData;
+    const upstream_file = form_data.get("file");
+
+    expect(upstream_file).toBeInstanceOf(File);
+    expect((upstream_file as File).type).toBe("application/pdf");
+    expect(request_init.signal).toBeInstanceOf(AbortSignal);
   });
 });

@@ -11,15 +11,86 @@ import { logWarn } from "@/utils/server/logger";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_UPSTREAM_MESSAGE_LENGTH = 240;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizePdfFile(file: File): File {
+  const is_pdf_name = file.name.toLowerCase().endsWith(".pdf");
+
+  if (!is_pdf_name || file.type === "application/pdf") {
+    return file;
+  }
+
+  // Some clients send empty or generic MIME types for PDFs.
+  return new File([file], file.name, {
+    type: "application/pdf",
+    lastModified: file.lastModified,
+  });
+}
+
+function sanitizeUpstreamMessage(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.startsWith("<!DOCTYPE") || normalized.startsWith("<html")) {
+    return null;
+  }
+
+  return normalized.slice(0, MAX_UPSTREAM_MESSAGE_LENGTH);
+}
+
+function readObjectMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const obj = payload as Record<string, unknown>;
+
+  for (const key of ["message", "error", "detail"]) {
+    const value = obj[key];
+    if (typeof value === "string") {
+      return sanitizeUpstreamMessage(value);
+    }
+  }
+
+  return null;
+}
+
+async function readUpstreamErrorMessage(response: Response): Promise<string | null> {
+  const content_type = response.headers.get("content-type") ?? "";
+
+  try {
+    if (content_type.toLowerCase().includes("application/json")) {
+      const payload: unknown = await response.json();
+      return readObjectMessage(payload);
+    }
+  } catch {
+    return null;
+  }
+
+  try {
+    const text = await response.text();
+    return sanitizeUpstreamMessage(text);
+  } catch {
+    return null;
+  }
 }
 
 export async function uploadStatementForTransform(
   file: File,
 ): Promise<MpesaTransformEntry[]> {
   const api_base_url = requireEnv("API_BASE_URL").replace(/\/$/, "");
+  const normalized_file = normalizePdfFile(file);
 
   let last_error: unknown;
 
@@ -29,23 +100,28 @@ export async function uploadStatementForTransform(
 
     try {
       const form_data = new FormData();
-      form_data.append("file", file, file.name || "statement.pdf");
+      form_data.append(
+        "file",
+        normalized_file,
+        normalized_file.name || "statement.pdf",
+      );
 
       const response = await fetch(`${api_base_url}/statements/upload-pdf`, {
         method: "POST",
         body: form_data,
+        signal: controller.signal,
       });
 
       clearTimeout(timeout);
 
       if (!response.ok) {
-        const response_body = await response.text();
+        const response_message = await readUpstreamErrorMessage(response);
 
         if (response.status === 400 || response.status === 422) {
           throw new ApiError(
             422,
             "UPSTREAM_ERROR",
-            "Statement parser rejected the file",
+            response_message || "Statement parser rejected the file",
           );
         }
 
@@ -61,9 +137,9 @@ export async function uploadStatementForTransform(
         throw new ApiError(
           502,
           "UPSTREAM_ERROR",
-          response_body
-            ? `Statement parser failed with status ${response.status}`
-            : "Statement parser request failed",
+          response_message
+            ? `Statement parser failed with status ${response.status}: ${response_message}`
+            : `Statement parser failed with status ${response.status}`,
         );
       }
 
