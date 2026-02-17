@@ -10,7 +10,7 @@ import {
 import { List, Sparkles } from "lucide-react";
 
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
-import type { ToolUIPart } from "ai";
+import type { ToolUIPart, UIMessage } from "ai";
 
 import {
   Conversation,
@@ -81,11 +81,6 @@ interface MessageType {
 
 const initialMessages: MessageType[] = [];
 
-const delay = (ms: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
 const SuggestionItem = ({
   suggestion,
   onClick,
@@ -142,63 +137,146 @@ export const AiDialog = ({
     [],
   );
 
-  const streamResponse = useCallback(
-    async (messageId: string, content: string) => {
-      setStatus("streaming");
-      setStreamingMessageId(messageId);
-
-      const words = content.split(" ");
-      let currentContent = "";
-
-      for (const [i, word] of words.entries()) {
-        currentContent += (i > 0 ? " " : "") + word;
-        updateMessageContent(messageId, currentContent);
-        await delay(Math.random() * 100 + 50);
-      }
-
-      setStatus("ready");
-      setStreamingMessageId(null);
-    },
-    [updateMessageContent],
-  );
-
   const addUserMessage = useCallback(
     (content: string) => {
+      const userMessageId = `user-${Date.now()}`;
       const userMessage: MessageType = {
         from: "user",
-        key: `user-${Date.now()}`,
+        key: userMessageId,
         versions: [
           {
             content,
-            id: `user-${Date.now()}`,
+            id: userMessageId,
           },
         ],
       };
 
       setMessages((prev) => [...prev, userMessage]);
+      const assistantMessageId = `assistant-${Date.now()}`;
+      const assistantMessage: MessageType = {
+        from: "assistant",
+        key: assistantMessageId,
+        versions: [
+          {
+            content: "",
+            id: assistantMessageId,
+          },
+        ],
+      };
 
-      // TODO: Replace with actual API call
-      // setTimeout(() => {
-      //   const assistantMessageId = `assistant-${Date.now()}`;
-      //   const randomResponse =
-      //     mockResponses[Math.floor(Math.random() * mockResponses.length)];
+      setMessages((prev) => [...prev, assistantMessage]);
+      setStatus("streaming");
+      setStreamingMessageId(assistantMessageId);
 
-      //   const assistantMessage: MessageType = {
-      //     from: "assistant",
-      //     key: `assistant-${Date.now()}`,
-      //     versions: [
-      //       {
-      //         content: "",
-      //         id: assistantMessageId,
-      //       },
-      //     ],
-      //   };
+      const conversationForRequest = [...messages, userMessage];
 
-      //   setMessages((prev) => [...prev, assistantMessage]);
-      //   streamResponse(assistantMessageId, randomResponse);
-      // }, 500);
+      void (async () => {
+        let hasError = false;
+
+        try {
+          const apiMessages: UIMessage[] = conversationForRequest.map((message) => {
+            const latestVersion = message.versions[message.versions.length - 1];
+            return {
+              id: latestVersion?.id ?? message.key,
+              role: message.from,
+              parts: [
+                {
+                  type: "text",
+                  text: latestVersion?.content ?? "",
+                },
+              ],
+            };
+          });
+
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messages: apiMessages,
+              model: "openai/gpt-4o-mini",
+              webSearch: useWebSearch,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to get AI response");
+          }
+
+          if (!response.body) {
+            throw new Error("No response body from AI");
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let currentContent = "";
+          let streamDone = false;
+
+          while (!streamDone) {
+            const { value, done } = await reader.read();
+            if (done) {
+              break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const events = buffer.split("\n\n");
+            buffer = events.pop() ?? "";
+
+            for (const event of events) {
+              const dataLines = event
+                .split("\n")
+                .filter((line) => line.startsWith("data: "));
+
+              for (const line of dataLines) {
+                const rawPayload = line.slice(6).trim();
+                if (!rawPayload) {
+                  continue;
+                }
+
+                if (rawPayload === "[DONE]") {
+                  streamDone = true;
+                  break;
+                }
+
+                const chunk = JSON.parse(rawPayload) as {
+                  type: string;
+                  delta?: string;
+                  errorText?: string;
+                };
+
+                if (chunk.type === "text-delta" && chunk.delta) {
+                  currentContent += chunk.delta;
+                  updateMessageContent(assistantMessageId, currentContent);
+                }
+
+                if (chunk.type === "error") {
+                  throw new Error(chunk.errorText || "AI stream error");
+                }
+              }
+
+              if (streamDone) {
+                break;
+              }
+            }
+          }
+        } catch (error) {
+          hasError = true;
+          setStatus("error");
+          toast.error("AI request failed", {
+            description:
+              error instanceof Error ? error.message : "Unable to stream response",
+          });
+        } finally {
+          setStreamingMessageId(null);
+          if (!hasError) {
+            setStatus("ready");
+          }
+        }
+      })();
     },
-    [streamResponse],
+    [messages, updateMessageContent, useWebSearch],
   );
 
   const handleSubmit = useCallback(
