@@ -209,7 +209,21 @@ export function BudgetSpreadsheet({
             </span>
           </div>
 
-          <AiDialog context={{ incomeCategories, expenseCategories }} />
+          <AiDialog
+            context={{ incomeCategories, expenseCategories }}
+            suggestions={[
+              "How can I reduce my monthly expenses?",
+              "What are effective budgeting strategies?",
+              "Analyze my spending patterns",
+              "How should I allocate my income?",
+              "Tips for managing debt",
+              "How to create a realistic budget?",
+              "What's a good emergency fund amount?",
+              "How can I save more money?",
+            ]}
+            contextLabel={`${new Date(year, month - 1).toLocaleString("default", { month: "long", year: "numeric" })} Budget`}
+            placeholder="Ask for budgeting advice, tips, or insights based on your current budget data."
+          />
         </div>
       </div>
 
