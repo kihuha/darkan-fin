@@ -1,4 +1,5 @@
 "use client";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -50,6 +51,22 @@ import {
   SourcesContent,
   SourcesTrigger,
 } from "@/components/ai-elements/sources";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import {
+  InlineCitation,
+  InlineCitationCard,
+  InlineCitationCardBody,
+  InlineCitationCardTrigger,
+  InlineCitationCarousel,
+  InlineCitationCarouselContent,
+  InlineCitationCarouselHeader,
+  InlineCitationCarouselIndex,
+  InlineCitationCarouselItem,
+  InlineCitationCarouselNext,
+  InlineCitationCarouselPrev,
+  InlineCitationSource,
+  InlineCitationText,
+} from "@/components/ai-elements/inline-citation";
 
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { GlobeIcon } from "lucide-react";
@@ -116,7 +133,9 @@ export const AiDialog = ({
     "submitted" | "streaming" | "ready" | "error"
   >("ready");
   const [messages, setMessages] = useState<MessageType[]>(initialMessages);
-  const [, setStreamingMessageId] = useState<string | null>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
+    null,
+  );
 
   const updateMessageContent = useCallback(
     (messageId: string, newContent: string) => {
@@ -131,6 +150,29 @@ export const AiDialog = ({
             };
           }
           return msg;
+        }),
+      );
+    },
+    [],
+  );
+
+  const updateMessageSources = useCallback(
+    (messageId: string, source: { href: string; title: string }) => {
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (!msg.versions.some((v) => v.id === messageId)) {
+            return msg;
+          }
+
+          const existingSources = msg.sources ?? [];
+          if (existingSources.some((s) => s.href === source.href)) {
+            return msg;
+          }
+
+          return {
+            ...msg,
+            sources: [...existingSources, source],
+          };
         }),
       );
     },
@@ -174,19 +216,31 @@ export const AiDialog = ({
         let hasError = false;
 
         try {
-          const apiMessages: UIMessage[] = conversationForRequest.map((message) => {
-            const latestVersion = message.versions[message.versions.length - 1];
-            return {
-              id: latestVersion?.id ?? message.key,
-              role: message.from,
-              parts: [
+          const apiMessages: UIMessage[] = conversationForRequest.map(
+            (message, index) => {
+              const latestVersion =
+                message.versions[message.versions.length - 1];
+              const parts: UIMessage["parts"] = [
                 {
                   type: "text",
-                  text: latestVersion?.content ?? "",
+                  text:
+                    index === conversationForRequest.length - 1 &&
+                    message.from === "user"
+                      ? JSON.stringify({
+                          text: latestVersion?.content ?? "",
+                          context,
+                        })
+                      : (latestVersion?.content ?? ""),
                 },
-              ],
-            };
-          });
+              ];
+
+              return {
+                id: latestVersion?.id ?? message.key,
+                role: message.from,
+                parts,
+              };
+            },
+          );
 
           const response = await fetch("/api/chat", {
             method: "POST",
@@ -244,11 +298,20 @@ export const AiDialog = ({
                   type: string;
                   delta?: string;
                   errorText?: string;
+                  url?: string;
+                  title?: string;
                 };
 
                 if (chunk.type === "text-delta" && chunk.delta) {
                   currentContent += chunk.delta;
                   updateMessageContent(assistantMessageId, currentContent);
+                }
+
+                if (chunk.type === "source-url" && chunk.url) {
+                  updateMessageSources(assistantMessageId, {
+                    href: chunk.url,
+                    title: chunk.title || chunk.url,
+                  });
                 }
 
                 if (chunk.type === "error") {
@@ -266,7 +329,9 @@ export const AiDialog = ({
           setStatus("error");
           toast.error("AI request failed", {
             description:
-              error instanceof Error ? error.message : "Unable to stream response",
+              error instanceof Error
+                ? error.message
+                : "Unable to stream response",
           });
         } finally {
           setStreamingMessageId(null);
@@ -276,7 +341,13 @@ export const AiDialog = ({
         }
       })();
     },
-    [messages, updateMessageContent, useWebSearch],
+    [
+      context,
+      messages,
+      updateMessageContent,
+      updateMessageSources,
+      useWebSearch,
+    ],
   );
 
   const handleSubmit = useCallback(
@@ -331,16 +402,19 @@ export const AiDialog = ({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" className="text-primary">
+        <Button
+          variant="outline"
+          className="shadow-lg shadow-pink-500/10 border-pink-300"
+        >
           <Sparkles />
-          Ask AI
+          Ask AI about this Budget
         </Button>
       </DialogTrigger>
-      <DialogContent className="w-screen h-screen m-0 px-0 rounded-none max-w-none!">
+      <DialogContent className="w-screen h-screen m-0 px-0 md:px-4 rounded-none max-w-none!">
         <DialogHeader>
           <DialogTitle>AI analysis</DialogTitle>
         </DialogHeader>
-        <div className="relative flex size-full flex-col divide-y overflow-hidden">
+        <div className="relative flex size-full flex-col divide-y overflow-hidden md:max-w-4xl mx-auto">
           <Conversation>
             <ConversationContent>
               {messages.map(({ versions, ...message }) => (
@@ -375,7 +449,57 @@ export const AiDialog = ({
                             </Reasoning>
                           )}
                           <MessageContent>
-                            <MessageResponse>{version.content}</MessageResponse>
+                            {message.from === "assistant" &&
+                            message.sources?.length ? (
+                              <>
+                                <MessageResponse>
+                                  {version.content}
+                                </MessageResponse>
+                                <p className="text-sm leading-relaxed">
+                                  <InlineCitation>
+                                    <InlineCitationText>
+                                      Sources
+                                    </InlineCitationText>
+                                    <InlineCitationCard>
+                                      <InlineCitationCardTrigger
+                                        sources={message.sources.map(
+                                          (source) => source.href,
+                                        )}
+                                      />
+                                      <InlineCitationCardBody>
+                                        <InlineCitationCarousel>
+                                          <InlineCitationCarouselHeader>
+                                            <InlineCitationCarouselPrev />
+                                            <InlineCitationCarouselNext />
+                                            <InlineCitationCarouselIndex />
+                                          </InlineCitationCarouselHeader>
+                                          <InlineCitationCarouselContent>
+                                            {message.sources.map((source) => (
+                                              <InlineCitationCarouselItem
+                                                key={source.href}
+                                              >
+                                                <InlineCitationSource
+                                                  title={source.title}
+                                                  url={source.href}
+                                                />
+                                              </InlineCitationCarouselItem>
+                                            ))}
+                                          </InlineCitationCarouselContent>
+                                        </InlineCitationCarousel>
+                                      </InlineCitationCardBody>
+                                    </InlineCitationCard>
+                                  </InlineCitation>
+                                </p>
+                              </>
+                            ) : (
+                              <MessageResponse>
+                                {version.content}
+                              </MessageResponse>
+                            )}
+                            {message.from === "assistant" &&
+                              streamingMessageId === version.id && (
+                                <Shimmer>generating...</Shimmer>
+                              )}
                           </MessageContent>
                         </div>
                       </Message>
