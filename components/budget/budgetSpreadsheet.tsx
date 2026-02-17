@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react";
 import { toast } from "sonner";
+import { AiDialog } from "../ai-dialog";
 
 interface CategoryBudgetItem {
   category_id: string;
@@ -193,7 +194,7 @@ export function BudgetSpreadsheet({
   return (
     <div className="space-y-6">
       <div className="mt-4 flex gap-x-4 items-center justify-between">
-        <div className="space-y-1">
+        <div className="space-y-1 flex items-center justify-between w-full">
           <div className="text-sm text-muted-foreground">
             Net Amount:{" "}
             <span
@@ -207,6 +208,8 @@ export function BudgetSpreadsheet({
               })}
             </span>
           </div>
+
+          <AiDialog context={{ incomeCategories, expenseCategories }} />
         </div>
       </div>
 
