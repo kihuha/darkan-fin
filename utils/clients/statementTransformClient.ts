@@ -92,6 +92,7 @@ async function readUpstreamErrorMessage(
 
 export async function uploadStatementForTransform(
   file: File,
+  password?: string,
 ): Promise<StatementTransformEntry[]> {
   const api_base_url = requireEnv("API_BASE_URL").replace(/\/$/, "");
   const normalized_file = normalizePdfFile(file);
@@ -109,6 +110,9 @@ export async function uploadStatementForTransform(
         normalized_file,
         normalized_file.name || "statement.pdf",
       );
+      if (password) {
+        form_data.append("password", password);
+      }
 
       const response = await fetch(`${api_base_url}/statements/upload-pdf`, {
         method: "POST",
@@ -217,6 +221,7 @@ export async function uploadStatementForTransform(
 
 export async function uploadMultipleStatementsForTransform(
   files: File[],
+  passwords?: Record<string, string>,
 ): Promise<StatementTransformEntry[]> {
   const api_base_url = requireEnv("API_BASE_URL").replace(/\/$/, "");
   const normalized_files = files.map(normalizePdfFile);
@@ -233,6 +238,9 @@ export async function uploadMultipleStatementsForTransform(
       // Append all files with the same field name "files"
       for (const file of normalized_files) {
         form_data.append("files", file, file.name || "statement.pdf");
+      }
+      if (passwords && Object.keys(passwords).length > 0) {
+        form_data.append("passwords", JSON.stringify(passwords));
       }
 
       const response = await fetch(`${api_base_url}/statements/upload-pdfs`, {

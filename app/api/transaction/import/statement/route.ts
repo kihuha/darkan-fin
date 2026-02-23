@@ -26,6 +26,12 @@ export const POST = withRouteContext(
       .filter((item): item is File => item instanceof File);
     const single_file = form_data.get("file");
 
+    // Extract passwords from FormData if present
+    const passwordsJson = form_data.get("passwords");
+    const passwords = passwordsJson
+      ? JSON.parse(passwordsJson as string)
+      : ({} as Record<string, string>);
+
     const parsed_form = statement_import_form_schema.safeParse({
       file: single_file instanceof File ? single_file : undefined,
       files: files.length > 0 ? files : undefined,
@@ -42,8 +48,14 @@ export const POST = withRouteContext(
 
     // Use the appropriate function based on whether single or multiple files
     const entries = parsed_form.data.files
-      ? await uploadMultipleStatementsForTransform(parsed_form.data.files)
-      : await uploadStatementForTransform(parsed_form.data.file!);
+      ? await uploadMultipleStatementsForTransform(
+          parsed_form.data.files,
+          passwords,
+        )
+      : await uploadStatementForTransform(
+          parsed_form.data.file!,
+          passwords[parsed_form.data.file!.name] || undefined,
+        );
 
     const summary = await import_statement_transactions({
       family_id: family.family_id,

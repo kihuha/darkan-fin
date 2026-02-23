@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import type { VariantProps } from "class-variance-authority";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { PDFDocument } from "pdf-lib";
 
 const ACCEPTED_TYPES = [".pdf", "application/pdf"].join(",");
 
@@ -32,10 +33,17 @@ export function StatementImportDialog({
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [protectedFiles, setProtectedFiles] = useState<{
+    [key: string]: boolean;
+  }>({});
+  const [passwords, setPasswords] = useState<{ [key: string]: string }>({});
+  const [isCheckingFiles, setIsCheckingFiles] = useState(false);
 
   const resetForm = () => {
     setFiles([]);
     setIsUploading(false);
+    setProtectedFiles({});
+    setPasswords({});
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -45,14 +53,82 @@ export function StatementImportDialog({
     }
   };
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+  // Check if a PDF is password-protected
+  const checkPasswordProtection = async (file: File): Promise<boolean> => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+
+      // First, try loading without any password
+      try {
+        await PDFDocument.load(arrayBuffer);
+        // If successful, it's not password-protected
+        return false;
+      } catch (error: unknown) {
+        // If it fails due to encryption, try with ignoreEncryption
+        const errorMessage = (error as Error)?.message || "";
+        if (
+          errorMessage.includes("encryption") ||
+          errorMessage.includes("password") ||
+          errorMessage.includes("encrypted")
+        ) {
+          try {
+            // Try to load while ignoring encryption
+            await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+            // If this succeeds, it means the PDF is encrypted but we can partially read it
+            return true;
+          } catch {
+            // If even ignoring encryption fails, it's still encrypted
+            return true;
+          }
+        }
+        // For other errors, it's probably not a valid PDF or has other issues
+        return false;
+      }
+    } catch (error) {
+      console.error(`Error checking ${file.name}:`, error);
+      return false;
+    }
+  };
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.target.files ?? []);
     setFiles(selected);
+    setIsCheckingFiles(true);
+
+    // Check each file for password protection
+    const protected_map: { [key: string]: boolean } = {};
+    for (const file of selected) {
+      const isProtected = await checkPasswordProtection(file);
+      protected_map[file.name] = isProtected;
+    }
+
+    setProtectedFiles(protected_map);
+    setIsCheckingFiles(false);
+  };
+
+  const handlePasswordChange = (fileName: string, password: string) => {
+    setPasswords((prev) => ({
+      ...prev,
+      [fileName]: password,
+    }));
   };
 
   const handleImport = async () => {
     if (files.length === 0) {
       toast.error("Select statement files to upload.");
+      return;
+    }
+
+    // Check if there are any protected files without passwords
+    const protectedWithoutPasswords = Object.entries(protectedFiles)
+      .filter(([, isProtected]) => isProtected)
+      .filter(([fileName]) => !passwords[fileName])
+      .map(([fileName]) => fileName);
+
+    if (protectedWithoutPasswords.length > 0) {
+      toast.error(
+        `Please provide passwords for: ${protectedWithoutPasswords.join(", ")}`,
+      );
       return;
     }
 
@@ -65,7 +141,10 @@ export function StatementImportDialog({
         formData.append("files", file);
       }
 
-      const response = await fetch("/api/transaction/import/mpesa", {
+      // Append passwords for protected files
+      formData.append("passwords", JSON.stringify(passwords));
+
+      const response = await fetch("/api/transaction/import/statement", {
         method: "POST",
         body: formData,
       });
@@ -122,10 +201,16 @@ export function StatementImportDialog({
             accept={ACCEPTED_TYPES}
             onChange={handleFileChange}
             multiple
+            disabled={isCheckingFiles || isUploading}
           />
           {files.length > 0 && (
             <div className="text-sm text-muted-foreground">
               {files.length} file{files.length !== 1 ? "s" : ""} selected
+            </div>
+          )}
+          {isCheckingFiles && (
+            <div className="text-sm text-muted-foreground">
+              Checking files for password protection...
             </div>
           )}
           <div className="text-xs text-muted-foreground">
@@ -133,37 +218,55 @@ export function StatementImportDialog({
             Completion Time or Transaction Date, Paid In, Withdrawn, and
             Details.
           </div>
-          <div>
-            <Alert variant="destructive">
-              <AlertTitle>PDF Password Required</AlertTitle>
-              <AlertDescription>
-                <p>Please provide the password for these pdfs</p>
-                {files.map((file, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-2 gap-x-3 w-full items-center py-2"
-                  >
-                    <p className="truncate text-xs">{file.name}</p>
-                    <Input
-                      type="password"
-                      placeholder="password"
-                      disabled={isUploading}
-                    />
-                  </div>
-                ))}
-              </AlertDescription>
-            </Alert>
-          </div>
+
+          {/* Show password input only for protected files */}
+          {Object.values(protectedFiles).some((isProtected) => isProtected) && (
+            <div>
+              <Alert variant="destructive">
+                <AlertTitle>PDF Password Required</AlertTitle>
+                <AlertDescription>
+                  <p>Please provide the password for these pdfs</p>
+                  {files.map((file) =>
+                    protectedFiles[file.name] ? (
+                      <div
+                        key={file.name}
+                        className="grid grid-cols-2 gap-x-3 w-full items-center py-2"
+                      >
+                        <p className="truncate text-xs">{file.name}</p>
+                        <Input
+                          type="password"
+                          placeholder="password"
+                          value={passwords[file.name] || ""}
+                          onChange={(e) =>
+                            handlePasswordChange(file.name, e.target.value)
+                          }
+                          disabled={isUploading}
+                        />
+                      </div>
+                    ) : null,
+                  )}
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-2">
             <Button
               variant="ghost"
               onClick={() => handleOpenChange(false)}
-              disabled={isUploading}
+              disabled={isUploading || isCheckingFiles}
             >
               Cancel
             </Button>
-            <Button onClick={handleImport} disabled={isUploading}>
-              {isUploading ? "Importing..." : "Import Transactions"}
+            <Button
+              onClick={handleImport}
+              disabled={isUploading || isCheckingFiles}
+            >
+              {isUploading
+                ? "Importing..."
+                : isCheckingFiles
+                  ? "Checking..."
+                  : "Import Transactions"}
             </Button>
           </div>
         </div>
