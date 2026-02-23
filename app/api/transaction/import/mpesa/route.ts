@@ -1,9 +1,12 @@
-import { mpesa_import_form_schema } from "@/lib/validations/mpesa";
+import { statement_import_form_schema } from "@/lib/validations/statement";
 import { jsonSuccess } from "@/utils/api-response";
 import { ApiError } from "@/utils/errors";
 import { withRouteContext } from "@/utils/route";
-import { uploadStatementForTransform } from "@/utils/clients/mpesaTransformClient";
-import { import_mpesa_transactions } from "@/utils/services/mpesa-import-service";
+import {
+  uploadStatementForTransform,
+  uploadMultipleStatementsForTransform,
+} from "@/utils/clients/statementTransformClient";
+import { import_statement_transactions } from "@/utils/services/statement-import-service";
 import { enforceRateLimit } from "@/utils/server/rate-limit";
 import { logInfo } from "@/utils/server/logger";
 
@@ -13,12 +16,20 @@ export const POST = withRouteContext(
       throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
     }
 
-    enforceRateLimit(`mpesa_import:${family.family_id}`, 5, 60_000);
+    enforceRateLimit(`statement_import:${family.family_id}`, 5, 60_000);
 
     const form_data = await request.formData();
-    const parsed_form = mpesa_import_form_schema.safeParse(
-      Object.fromEntries(form_data.entries()),
-    );
+
+    // Extract files from FormData
+    const files = form_data
+      .getAll("files")
+      .filter((item): item is File => item instanceof File);
+    const single_file = form_data.get("file");
+
+    const parsed_form = statement_import_form_schema.safeParse({
+      file: single_file instanceof File ? single_file : undefined,
+      files: files.length > 0 ? files : undefined,
+    });
 
     if (!parsed_form.success) {
       throw new ApiError(
@@ -29,14 +40,18 @@ export const POST = withRouteContext(
       );
     }
 
-    const entries = await uploadStatementForTransform(parsed_form.data.file);
-    const summary = await import_mpesa_transactions({
+    // Use the appropriate function based on whether single or multiple files
+    const entries = parsed_form.data.files
+      ? await uploadMultipleStatementsForTransform(parsed_form.data.files)
+      : await uploadStatementForTransform(parsed_form.data.file!);
+
+    const summary = await import_statement_transactions({
       family_id: family.family_id,
       user_id: user.user_id,
       entries,
     });
 
-    logInfo("mpesa_import.completed", {
+    logInfo("statement_import.completed", {
       request_id,
       family_id: family.family_id,
       user_id: user.user_id,

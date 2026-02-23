@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
 import { TransactionTable } from "./transactionTable";
 import { TransactionForm } from "../forms/transactionForm";
-import { MpesaImportDialog } from "./mpesaImportDialog";
+import { StatementImportDialog } from "./statementImportDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -364,7 +364,7 @@ export const TransactionSection = () => {
           </EmptyHeader>
           <EmptyContent>
             <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
-              <MpesaImportDialog
+              <StatementImportDialog
                 onImported={fetchTransactions}
                 triggerClassName="w-full sm:w-auto"
                 triggerVariant="outline"

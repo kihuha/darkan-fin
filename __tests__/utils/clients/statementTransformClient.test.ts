@@ -1,5 +1,5 @@
 import { ApiError } from "@/utils/errors";
-import { uploadStatementForTransform } from "@/utils/clients/mpesaTransformClient";
+import { uploadStatementForTransform } from "@/utils/clients/statementTransformClient";
 
 const mock_require_env = jest.fn((key: string) => {
   if (key === "API_BASE_URL") {
@@ -26,7 +26,7 @@ function json_response(body: unknown, status = 200): Response {
   });
 }
 
-describe("mpesaTransformClient", () => {
+describe("statementTransformClient", () => {
   beforeEach(() => {
     mock_require_env.mockClear();
     global.fetch = jest.fn() as unknown as typeof fetch;

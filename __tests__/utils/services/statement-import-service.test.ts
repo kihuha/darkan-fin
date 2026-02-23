@@ -1,6 +1,6 @@
-import { import_mpesa_transactions } from "@/utils/services/mpesa-import-service";
+import { import_statement_transactions } from "@/utils/services/statement-import-service";
 
-describe("mpesa import service", () => {
+describe("statement import service", () => {
   it("normalizes, deduplicates, and inserts in bulk", async () => {
     const any = jest
       .fn()
@@ -28,7 +28,7 @@ describe("mpesa import service", () => {
         callback(tx),
     };
 
-    const summary = await import_mpesa_transactions({
+    const summary = await import_statement_transactions({
       db: db as never,
       family_id: "42",
       user_id: "user-1",

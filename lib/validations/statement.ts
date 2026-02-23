@@ -14,7 +14,7 @@ const file_schema = z
     "Only PDF statements are supported",
   );
 
-export const mpesa_import_form_schema = z
+export const statement_import_form_schema = z
   .object({
     file: file_schema.optional(),
     files: z.array(file_schema).optional(),
@@ -29,7 +29,7 @@ const money_value_schema = z
   .optional()
   .nullable();
 
-export const mpesa_statement_entry_schema = z.object({
+export const statement_entry_schema = z.object({
   ref: z.string().trim().max(255).optional(),
   time: z.string().trim().max(64).optional(),
   details: z.string().trim().max(1000).optional(),
@@ -38,8 +38,8 @@ export const mpesa_statement_entry_schema = z.object({
   money_out: money_value_schema,
 });
 
-export const mpesa_transform_response_schema = z
-  .array(mpesa_statement_entry_schema)
+export const statement_transform_response_schema = z
+  .array(statement_entry_schema)
   .max(5000, "Too many statement rows returned");
 
-export type MpesaTransformEntry = z.infer<typeof mpesa_statement_entry_schema>;
+export type StatementTransformEntry = z.infer<typeof statement_entry_schema>;

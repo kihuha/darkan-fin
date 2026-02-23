@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { MpesaImportDialog } from "./mpesaImportDialog";
+import { StatementImportDialog } from "./statementImportDialog";
 import {
   Popover,
   PopoverContent,
@@ -131,7 +131,7 @@ export const TransactionFilters = ({
               ? "Recategorizing..."
               : "Recategorize Transactions"}
           </Button>
-          <MpesaImportDialog
+          <StatementImportDialog
             onImported={onImported}
             triggerClassName="w-full"
             triggerVariant="outline"

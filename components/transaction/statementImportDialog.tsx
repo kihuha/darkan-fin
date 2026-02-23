@@ -14,20 +14,21 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import type { VariantProps } from "class-variance-authority";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 
 const ACCEPTED_TYPES = [".pdf", "application/pdf"].join(",");
 
-type MpesaImportDialogProps = {
+type StatementImportDialogProps = {
   onImported?: () => void;
   triggerClassName?: string;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
 };
 
-export function MpesaImportDialog({
+export function StatementImportDialog({
   onImported,
   triggerClassName,
   triggerVariant = "outline",
-}: MpesaImportDialogProps) {
+}: StatementImportDialogProps) {
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -51,7 +52,7 @@ export function MpesaImportDialog({
 
   const handleImport = async () => {
     if (files.length === 0) {
-      toast.error("Select M-Pesa statement files to upload.");
+      toast.error("Select statement files to upload.");
       return;
     }
 
@@ -89,7 +90,7 @@ export function MpesaImportDialog({
       onImported?.();
       handleOpenChange(false);
     } catch (error) {
-      console.error("Error importing M-Pesa statements:", error);
+      console.error("Error importing statements:", error);
       toast.error("Failed to import statements.");
     } finally {
       setIsUploading(false);
@@ -105,12 +106,12 @@ export function MpesaImportDialog({
           disabled={isUploading}
         >
           <Upload className="mr-2 h-4 w-4" />
-          Import M-Pesa Statements
+          Import Statements
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Import M-Pesa Statements</DialogTitle>
+          <DialogTitle>Import Statements</DialogTitle>
           <DialogDescription>
             Upload PDF statements to add transactions in bulk.
           </DialogDescription>
@@ -131,6 +132,27 @@ export function MpesaImportDialog({
             PDFs are parsed automatically. CSV/Excel statements should include
             Completion Time or Transaction Date, Paid In, Withdrawn, and
             Details.
+          </div>
+          <div>
+            <Alert variant="destructive">
+              <AlertTitle>PDF Password Required</AlertTitle>
+              <AlertDescription>
+                <p>Please provide the password for these pdfs</p>
+                {files.map((file, index) => (
+                  <div
+                    key={index}
+                    className="grid grid-cols-2 gap-x-3 w-full items-center py-2"
+                  >
+                    <p className="truncate text-xs">{file.name}</p>
+                    <Input
+                      type="password"
+                      placeholder="password"
+                      disabled={isUploading}
+                    />
+                  </div>
+                ))}
+              </AlertDescription>
+            </Alert>
           </div>
           <div className="flex items-center justify-end gap-2">
             <Button

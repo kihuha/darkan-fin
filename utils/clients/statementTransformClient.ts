@@ -1,9 +1,9 @@
 import "server-only";
 
 import {
-  mpesa_transform_response_schema,
-  type MpesaTransformEntry,
-} from "@/lib/validations/mpesa";
+  statement_transform_response_schema,
+  type StatementTransformEntry,
+} from "@/lib/validations/statement";
 import { ApiError } from "@/utils/errors";
 import { requireEnv } from "@/utils/server/env";
 import { logWarn } from "@/utils/server/logger";
@@ -92,7 +92,7 @@ async function readUpstreamErrorMessage(
 
 export async function uploadStatementForTransform(
   file: File,
-): Promise<MpesaTransformEntry[]> {
+): Promise<StatementTransformEntry[]> {
   const api_base_url = requireEnv("API_BASE_URL").replace(/\/$/, "");
   const normalized_file = normalizePdfFile(file);
 
@@ -130,7 +130,7 @@ export async function uploadStatementForTransform(
         }
 
         if (RETRYABLE_STATUS.has(response.status) && attempt < MAX_RETRIES) {
-          logWarn("mpesa_transform.retry", {
+          logWarn("statement_transform.retry", {
             attempt: attempt + 1,
             status: response.status,
           });
@@ -148,7 +148,7 @@ export async function uploadStatementForTransform(
       }
 
       const payload: unknown = await response.json();
-      const parsed = mpesa_transform_response_schema.safeParse(payload);
+      const parsed = statement_transform_response_schema.safeParse(payload);
 
       if (!parsed.success) {
         throw new ApiError(
@@ -170,7 +170,7 @@ export async function uploadStatementForTransform(
           error.status < 600 &&
           attempt < MAX_RETRIES
         ) {
-          logWarn("mpesa_transform.retry", {
+          logWarn("statement_transform.retry", {
             attempt: attempt + 1,
             status: error.status,
           });
@@ -185,7 +185,7 @@ export async function uploadStatementForTransform(
         error instanceof DOMException && error.name === "AbortError";
 
       if (is_timeout && attempt < MAX_RETRIES) {
-        logWarn("mpesa_transform.timeout_retry", {
+        logWarn("statement_transform.timeout_retry", {
           attempt: attempt + 1,
         });
         await sleep((attempt + 1) * 300);
@@ -217,7 +217,7 @@ export async function uploadStatementForTransform(
 
 export async function uploadMultipleStatementsForTransform(
   files: File[],
-): Promise<MpesaTransformEntry[]> {
+): Promise<StatementTransformEntry[]> {
   const api_base_url = requireEnv("API_BASE_URL").replace(/\/$/, "");
   const normalized_files = files.map(normalizePdfFile);
 
@@ -255,7 +255,7 @@ export async function uploadMultipleStatementsForTransform(
         }
 
         if (RETRYABLE_STATUS.has(response.status) && attempt < MAX_RETRIES) {
-          logWarn("mpesa_transform.retry", {
+          logWarn("statement_transform.retry", {
             attempt: attempt + 1,
             status: response.status,
           });
@@ -273,7 +273,7 @@ export async function uploadMultipleStatementsForTransform(
       }
 
       const payload: unknown = await response.json();
-      const parsed = mpesa_transform_response_schema.safeParse(payload);
+      const parsed = statement_transform_response_schema.safeParse(payload);
 
       if (!parsed.success) {
         throw new ApiError(
@@ -295,7 +295,7 @@ export async function uploadMultipleStatementsForTransform(
           error.status < 600 &&
           attempt < MAX_RETRIES
         ) {
-          logWarn("mpesa_transform.retry", {
+          logWarn("statement_transform.retry", {
             attempt: attempt + 1,
             status: error.status,
           });
@@ -310,7 +310,7 @@ export async function uploadMultipleStatementsForTransform(
         error instanceof DOMException && error.name === "AbortError";
 
       if (is_timeout && attempt < MAX_RETRIES) {
-        logWarn("mpesa_transform.timeout_retry", {
+        logWarn("statement_transform.timeout_retry", {
           attempt: attempt + 1,
         });
         await sleep((attempt + 1) * 300);

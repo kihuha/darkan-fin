@@ -7,7 +7,7 @@ import {
   findCategoryIdByTags,
   type CategoryTagEntry,
 } from "@/lib/category-recategorization";
-import type { MpesaTransformEntry } from "@/lib/validations/mpesa";
+import type { StatementTransformEntry } from "@/lib/validations/statement";
 import { ApiError } from "@/utils/errors";
 
 type CategoryRecord = CategoryTagEntry & {
@@ -21,10 +21,10 @@ type NormalizedTransaction = {
   transaction_date: string;
   description: string | null;
   fingerprint: string;
-  mpesa_ref: string | null;
+  statement_ref: string | null;
 };
 
-export type MpesaImportSummary = {
+export type StatementImportSummary = {
   inserted_count: number;
   skipped_duplicates_count: number;
   errors_count: number;
@@ -72,7 +72,7 @@ function parse_money(value: number | string | null | undefined): number {
   return Math.abs(parsed);
 }
 
-function normalize_description(entry: MpesaTransformEntry): string {
+function normalize_description(entry: StatementTransformEntry): string {
   const chunks = [
     entry.details,
     entry.ref ? `Ref: ${entry.ref}` : undefined,
@@ -90,20 +90,20 @@ function build_fingerprint(input: {
   transaction_date: string;
   amount: number;
   description: string | null;
-  mpesa_ref?: string | null;
+  statement_ref?: string | null;
 }): string {
-  // If we have an M-Pesa ref, use it as the primary identifier along with family_id
+  // If we have an statement ref, use it as the primary identifier along with family_id
   // This ensures transactions with the same ref are always treated as duplicates
   const parts = [
     input.family_id,
-    input.mpesa_ref || "", // Include ref if available
+    input.statement_ref || "", // Include ref if available
     input.transaction_date,
     input.amount.toFixed(2),
   ];
 
   // Only include description if no ref is available
   // This prevents description variations from creating duplicates when we have a ref
-  if (!input.mpesa_ref) {
+  if (!input.statement_ref) {
     parts.push((input.description ?? "").toLowerCase());
   }
 
@@ -111,7 +111,7 @@ function build_fingerprint(input: {
 }
 
 function normalize_entries(args: {
-  entries: MpesaTransformEntry[];
+  entries: StatementTransformEntry[];
   family_id: string;
   categories: CategoryRecord[];
 }): { normalized: NormalizedTransaction[]; errors_count: number } {
@@ -156,7 +156,7 @@ function normalize_entries(args: {
 
     const transaction_date = format(parsed_date, "yyyy-MM-dd");
     const description = normalize_description(entry) || null;
-    const mpesa_ref = entry.ref?.trim() || null;
+    const statement_ref = entry.ref?.trim() || null;
 
     const category_id = findCategoryIdByTags(
       description,
@@ -169,13 +169,13 @@ function normalize_entries(args: {
       amount,
       transaction_date,
       description,
-      mpesa_ref,
+      statement_ref,
       fingerprint: build_fingerprint({
         family_id,
         transaction_date,
         amount,
         description,
-        mpesa_ref,
+        statement_ref,
       }),
     });
   }
@@ -214,16 +214,16 @@ async function get_existing_fingerprints(args: {
     const transaction_date = format(row.transaction_date, "yyyy-MM-dd");
     const description = row.description;
 
-    // Extract M-Pesa ref from description if it exists
+    // Extract statement ref from description if it exists
     // Format: "... | Ref: XXXXXXXXX | ..."
-    const mpesa_ref = description?.match(/Ref:\s*([A-Z0-9]+)/i)?.[1] || null;
+    const statement_ref = description?.match(/Ref:\s*([A-Z0-9]+)/i)?.[1] || null;
 
     const fingerprint = build_fingerprint({
       family_id,
       transaction_date,
       amount: Number(row.amount),
       description,
-      mpesa_ref,
+      statement_ref,
     });
 
     fingerprints.add(fingerprint);
@@ -258,11 +258,11 @@ async function bulk_insert(args: {
   return result.count;
 }
 
-export async function import_mpesa_transactions(args: {
+export async function import_statement_transactions(args: {
   family_id: string;
   user_id: string;
-  entries: MpesaTransformEntry[];
-}): Promise<MpesaImportSummary> {
+  entries: StatementTransformEntry[];
+}): Promise<StatementImportSummary> {
   const { family_id, user_id, entries } = args;
 
   return prisma.$transaction(async (tx) => {
