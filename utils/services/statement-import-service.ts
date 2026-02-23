@@ -162,7 +162,7 @@ function normalize_entries(args: {
       description,
       matchable_categories,
       uncategorized.id,
-    );
+    ) as string;
 
     normalized.push({
       category_id,
@@ -216,7 +216,8 @@ async function get_existing_fingerprints(args: {
 
     // Extract statement ref from description if it exists
     // Format: "... | Ref: XXXXXXXXX | ..."
-    const statement_ref = description?.match(/Ref:\s*([A-Z0-9]+)/i)?.[1] || null;
+    const statement_ref =
+      description?.match(/Ref:\s*([A-Z0-9]+)/i)?.[1] || null;
 
     const fingerprint = build_fingerprint({
       family_id,
