@@ -2,24 +2,26 @@ import "server-only";
 
 import { createHash } from "crypto";
 import { format, isValid, parse } from "date-fns";
-import type { IDatabase, ITask } from "pg-promise";
-import { findCategoryIdByTags, type CategoryTagEntry } from "@/lib/category-recategorization";
+import { prisma } from "@/lib/prisma";
+import {
+  findCategoryIdByTags,
+  type CategoryTagEntry,
+} from "@/lib/category-recategorization";
 import type { MpesaTransformEntry } from "@/lib/validations/mpesa";
 import { ApiError } from "@/utils/errors";
 
-type DatabaseOrTransaction = IDatabase<unknown> | ITask<unknown>;
-
 type CategoryRecord = CategoryTagEntry & {
-  id: string | number;
+  id: string;
   name: string;
 };
 
 type NormalizedTransaction = {
-  category_id: string | number;
+  category_id: string;
   amount: number;
   transaction_date: string;
   description: string | null;
   fingerprint: string;
+  mpesa_ref: string | null;
 };
 
 export type MpesaImportSummary = {
@@ -71,7 +73,11 @@ function parse_money(value: number | string | null | undefined): number {
 }
 
 function normalize_description(entry: MpesaTransformEntry): string {
-  const chunks = [entry.details, entry.ref ? `Ref: ${entry.ref}` : undefined, entry.status ? `Status: ${entry.status}` : undefined]
+  const chunks = [
+    entry.details,
+    entry.ref ? `Ref: ${entry.ref}` : undefined,
+    entry.status ? `Status: ${entry.status}` : undefined,
+  ]
     .map((value) => value?.trim())
     .filter(Boolean) as string[];
 
@@ -84,17 +90,24 @@ function build_fingerprint(input: {
   transaction_date: string;
   amount: number;
   description: string | null;
+  mpesa_ref?: string | null;
 }): string {
-  return createHash("sha256")
-    .update(
-      [
-        input.family_id,
-        input.transaction_date,
-        input.amount.toFixed(2),
-        (input.description ?? "").toLowerCase(),
-      ].join("|"),
-    )
-    .digest("hex");
+  // If we have an M-Pesa ref, use it as the primary identifier along with family_id
+  // This ensures transactions with the same ref are always treated as duplicates
+  const parts = [
+    input.family_id,
+    input.mpesa_ref || "", // Include ref if available
+    input.transaction_date,
+    input.amount.toFixed(2),
+  ];
+
+  // Only include description if no ref is available
+  // This prevents description variations from creating duplicates when we have a ref
+  if (!input.mpesa_ref) {
+    parts.push((input.description ?? "").toLowerCase());
+  }
+
+  return createHash("sha256").update(parts.join("|")).digest("hex");
 }
 
 function normalize_entries(args: {
@@ -143,6 +156,8 @@ function normalize_entries(args: {
 
     const transaction_date = format(parsed_date, "yyyy-MM-dd");
     const description = normalize_description(entry) || null;
+    const mpesa_ref = entry.ref?.trim() || null;
+
     const category_id = findCategoryIdByTags(
       description,
       matchable_categories,
@@ -154,11 +169,13 @@ function normalize_entries(args: {
       amount,
       transaction_date,
       description,
+      mpesa_ref,
       fingerprint: build_fingerprint({
         family_id,
         transaction_date,
         amount,
         description,
+        mpesa_ref,
       }),
     });
   }
@@ -170,95 +187,108 @@ function normalize_entries(args: {
 }
 
 async function get_existing_fingerprints(args: {
-  tx: DatabaseOrTransaction;
   family_id: string;
   min_date: string;
   max_date: string;
 }): Promise<Set<string>> {
-  const { tx, family_id, min_date, max_date } = args;
+  const { family_id, min_date, max_date } = args;
 
-  const rows = await tx.any<{
-    amount: number | string;
-    transaction_date: string;
-    description: string | null;
-  }>(
-    `SELECT amount, transaction_date::text, description
-     FROM transaction
-     WHERE family_id = $1
-       AND transaction_date BETWEEN $2::date AND $3::date`,
-    [family_id, min_date, max_date],
-  );
+  const rows = await prisma.transaction.findMany({
+    where: {
+      family_id: BigInt(family_id),
+      transaction_date: {
+        gte: new Date(min_date),
+        lte: new Date(max_date),
+      },
+    },
+    select: {
+      amount: true,
+      transaction_date: true,
+      description: true,
+    },
+  });
 
-  return new Set(
-    rows.map((row) =>
-      build_fingerprint({
-        family_id,
-        transaction_date: row.transaction_date,
-        amount: Number(row.amount),
-        description: row.description,
-      }),
-    ),
-  );
+  const fingerprints = new Set<string>();
+
+  for (const row of rows) {
+    const transaction_date = format(row.transaction_date, "yyyy-MM-dd");
+    const description = row.description;
+
+    // Extract M-Pesa ref from description if it exists
+    // Format: "... | Ref: XXXXXXXXX | ..."
+    const mpesa_ref = description?.match(/Ref:\s*([A-Z0-9]+)/i)?.[1] || null;
+
+    const fingerprint = build_fingerprint({
+      family_id,
+      transaction_date,
+      amount: Number(row.amount),
+      description,
+      mpesa_ref,
+    });
+
+    fingerprints.add(fingerprint);
+  }
+
+  return fingerprints;
 }
 
 async function bulk_insert(args: {
-  tx: DatabaseOrTransaction;
   family_id: string;
   user_id: string;
   transactions: NormalizedTransaction[];
 }): Promise<number> {
-  const { tx, family_id, user_id, transactions } = args;
+  const { family_id, user_id, transactions } = args;
 
   if (transactions.length === 0) {
     return 0;
   }
 
-  const values: unknown[] = [];
-  const rows = transactions
-    .map((transaction, index) => {
-      const offset = index * 6;
-      values.push(
-        family_id,
-        transaction.category_id,
-        user_id,
-        transaction.amount,
-        transaction.transaction_date,
-        transaction.description,
-      );
+  // Use createMany for bulk insert
+  const result = await prisma.transaction.createMany({
+    data: transactions.map((transaction) => ({
+      family_id: BigInt(family_id),
+      category_id: BigInt(transaction.category_id),
+      user_id,
+      amount: transaction.amount,
+      transaction_date: new Date(transaction.transaction_date),
+      description: transaction.description,
+    })),
+  });
 
-      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`;
-    })
-    .join(", ");
-
-  const inserted = await tx.result(
-    `INSERT INTO transaction (family_id, category_id, user_id, amount, transaction_date, description)
-     VALUES ${rows}`,
-    values,
-  );
-
-  return inserted.rowCount;
+  return result.count;
 }
 
 export async function import_mpesa_transactions(args: {
-  db: DatabaseOrTransaction;
   family_id: string;
   user_id: string;
   entries: MpesaTransformEntry[];
 }): Promise<MpesaImportSummary> {
-  const { db, family_id, user_id, entries } = args;
+  const { family_id, user_id, entries } = args;
 
-  return db.tx(async (tx) => {
-    const categories = await tx.any<CategoryRecord>(
-      `SELECT id, name, tags
-       FROM category
-       WHERE family_id = $1`,
-      [family_id],
-    );
+  return prisma.$transaction(async (tx) => {
+    // Get all categories for the family
+    const categories = await tx.category.findMany({
+      where: {
+        family_id: BigInt(family_id),
+      },
+      select: {
+        id: true,
+        name: true,
+        tags: true,
+      },
+    });
+
+    // Convert to expected format
+    const formattedCategories: CategoryRecord[] = categories.map((cat) => ({
+      id: cat.id.toString(),
+      name: cat.name,
+      tags: cat.tags,
+    }));
 
     const { normalized, errors_count } = normalize_entries({
       entries,
       family_id,
-      categories,
+      categories: formattedCategories,
     });
 
     if (normalized.length === 0) {
@@ -277,7 +307,6 @@ export async function import_mpesa_transactions(args: {
     const max_date = sorted_dates[sorted_dates.length - 1];
 
     const existing_fingerprints = await get_existing_fingerprints({
-      tx,
       family_id,
       min_date,
       max_date,
@@ -299,7 +328,6 @@ export async function import_mpesa_transactions(args: {
     });
 
     const inserted_count = await bulk_insert({
-      tx,
       family_id,
       user_id,
       transactions: deduped,

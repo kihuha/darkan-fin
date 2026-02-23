@@ -1,4 +1,4 @@
-import db from "@/utils/db";
+import { prisma } from "@/lib/prisma";
 import {
   create_transaction_schema,
   transaction_delete_query_schema,
@@ -8,7 +8,6 @@ import {
 import { ApiError } from "@/utils/errors";
 import { jsonNoContent, jsonSuccess } from "@/utils/api-response";
 import { withRouteContext } from "@/utils/route";
-import { requireFoundInFamily, scopedOneOrNone } from "@/utils/db/scoped";
 
 function normalizeTransactionPayload(payload: Record<string, unknown>) {
   return {
@@ -48,59 +47,44 @@ export const GET = withRouteContext(async ({ request, family, request_id }) => {
   const { page, rows_per_page, month, year } = parsed_query.data;
   const should_paginate = month === undefined || year === undefined;
 
-  const values: unknown[] = [family.family_id];
-  const filters = ["t.family_id = $1"];
+  // Build where clause for Prisma
+  const where: any = {
+    family_id: BigInt(family.family_id),
+  };
 
+  // Add date filtering if month and year are provided
   if (month !== undefined && year !== undefined) {
-    values.push(month, year);
-    filters.push(
-      `EXTRACT(MONTH FROM t.transaction_date) = $${values.length - 1}`,
-    );
-    filters.push(`EXTRACT(YEAR FROM t.transaction_date) = $${values.length}`);
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+    where.transaction_date = {
+      gte: startDate,
+      lte: endDate,
+    };
   }
 
-  let pagination_clause = "";
+  // Get total count
+  const total = await prisma.transaction.count({ where });
 
-  if (should_paginate) {
-    values.push(rows_per_page, page * rows_per_page);
-    const limit_index = values.length - 1;
-    const offset_index = values.length;
-    pagination_clause = `\n     LIMIT $${limit_index}\n     OFFSET $${offset_index}`;
-  }
+  // Fetch transactions with category information
+  const transactions = await prisma.transaction.findMany({
+    where,
+    include: {
+      category: {
+        select: {
+          name: true,
+          type: true,
+        },
+      },
+    },
+    orderBy: [{ transaction_date: "desc" }, { id: "desc" }],
+    ...(should_paginate
+      ? {
+          skip: page * rows_per_page,
+          take: rows_per_page,
+        }
+      : {}),
+  });
 
-  const rows = await db.any<{
-    id: string;
-    family_id: string;
-    category_id: string;
-    user_id: string;
-    amount: number | string;
-    transaction_date: string;
-    description: string | null;
-    category_name: string;
-    category_type: "income" | "expense";
-    total_count: string;
-  }>(
-    `SELECT t.id,
-            t.family_id,
-            t.category_id,
-            t.user_id,
-            t.amount,
-            t.transaction_date::text,
-            t.description,
-            c.name AS category_name,
-            c.type AS category_type,
-            COUNT(*) OVER() AS total_count
-     FROM transaction t
-     JOIN category c
-       ON c.id = t.category_id
-      AND c.family_id = t.family_id
-     WHERE ${filters.join(" AND ")}
-     ORDER BY t.transaction_date DESC, t.id DESC
-     ${pagination_clause}`,
-    values,
-  );
-
-  const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
   const pagination = should_paginate
     ? {
         page,
@@ -115,12 +99,22 @@ export const GET = withRouteContext(async ({ request, family, request_id }) => {
         total_pages: total === 0 ? 0 : 1,
       };
 
+  // Format the response to match the expected structure
+  const rows = transactions.map((t) => ({
+    id: t.id.toString(),
+    family_id: t.family_id.toString(),
+    category_id: t.category_id.toString(),
+    user_id: t.user_id,
+    amount: Number(t.amount),
+    transaction_date: t.transaction_date.toISOString().split("T")[0],
+    description: t.description,
+    category_name: t.category.name,
+    category_type: t.category.type as "income" | "expense",
+  }));
+
   return jsonSuccess(
     {
-      rows: rows.map((row) => ({
-        ...row,
-        amount: Number(row.amount),
-      })),
+      rows,
       pagination,
     },
     {
@@ -153,53 +147,41 @@ export const POST = withRouteContext(
     const { category_id, amount, transaction_date, description } =
       parsed_body.data;
 
-    const category = await scopedOneOrNone<{ id: string }>(
-      family.family_id,
-      `SELECT id
-     FROM category
-     WHERE family_id = $1
-       AND id = $2`,
-      [category_id],
-    );
+    // Verify the category exists and belongs to the family
+    const category = await prisma.category.findFirst({
+      where: {
+        id: BigInt(category_id),
+        family_id: BigInt(family.family_id),
+      },
+    });
 
-    requireFoundInFamily(category, "Category");
+    if (!category) {
+      throw new ApiError(404, "NOT_FOUND", "Category not found in family");
+    }
 
-    const created = await db.one<{
-      id: string;
-      family_id: string;
-      category_id: string;
-      user_id: string;
-      amount: number | string;
-      transaction_date: string;
-      description: string | null;
-      created_at: string;
-      updated_at: string;
-    }>(
-      `INSERT INTO transaction (family_id, category_id, user_id, amount, transaction_date, description)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id,
-               family_id,
-               category_id,
-               user_id,
-               amount,
-               transaction_date::text,
-               description,
-               created_at,
-               updated_at`,
-      [
-        family.family_id,
-        category_id,
-        user.user_id,
+    // Create the transaction
+    const created = await prisma.transaction.create({
+      data: {
+        family_id: BigInt(family.family_id),
+        category_id: BigInt(category_id),
+        user_id: user.user_id,
         amount,
-        transaction_date,
+        transaction_date: new Date(transaction_date),
         description,
-      ],
-    );
+      },
+    });
 
     return jsonSuccess(
       {
-        ...created,
+        id: created.id.toString(),
+        family_id: created.family_id.toString(),
+        category_id: created.category_id.toString(),
+        user_id: created.user_id,
         amount: Number(created.amount),
+        transaction_date: created.transaction_date.toISOString().split("T")[0],
+        description: created.description,
+        created_at: created.created_at.toISOString(),
+        updated_at: created.updated_at.toISOString(),
       },
       {
         request_id,
@@ -232,90 +214,69 @@ export const PATCH = withRouteContext(
     const { id, category_id, amount, transaction_date, description } =
       parsed_body.data;
 
-    const existing = await scopedOneOrNone<{ id: string }>(
-      family.family_id,
-      `SELECT id
-     FROM transaction
-     WHERE family_id = $1
-       AND id = $2`,
-      [id],
-    );
+    // Verify the transaction exists and belongs to the family
+    const existing = await prisma.transaction.findFirst({
+      where: {
+        id: BigInt(id),
+        family_id: BigInt(family.family_id),
+      },
+    });
 
-    requireFoundInFamily(existing, "Transaction");
+    if (!existing) {
+      throw new ApiError(404, "NOT_FOUND", "Transaction not found in family");
+    }
 
+    // If category_id is being updated, verify it exists and belongs to the family
     if (category_id !== undefined) {
-      const category = await scopedOneOrNone<{ id: string }>(
-        family.family_id,
-        `SELECT id
-       FROM category
-       WHERE family_id = $1
-         AND id = $2`,
-        [category_id],
-      );
+      const category = await prisma.category.findFirst({
+        where: {
+          id: BigInt(category_id),
+          family_id: BigInt(family.family_id),
+        },
+      });
 
-      requireFoundInFamily(category, "Category");
+      if (!category) {
+        throw new ApiError(404, "NOT_FOUND", "Category not found in family");
+      }
     }
 
-    const updates: string[] = [];
-    const values: unknown[] = [];
+    // Build the update data object
+    const updateData: any = {};
+    if (category_id !== undefined) updateData.category_id = BigInt(category_id);
+    if (amount !== undefined) updateData.amount = amount;
+    if (transaction_date !== undefined)
+      updateData.transaction_date = new Date(transaction_date);
+    if (description !== undefined) updateData.description = description;
 
-    if (category_id !== undefined) {
-      values.push(category_id);
-      updates.push(`category_id = $${values.length}`);
-    }
-
-    if (amount !== undefined) {
-      values.push(amount);
-      updates.push(`amount = $${values.length}`);
-    }
-
-    if (transaction_date !== undefined) {
-      values.push(transaction_date);
-      updates.push(`transaction_date = $${values.length}`);
-    }
-
-    if (description !== undefined) {
-      values.push(description);
-      updates.push(`description = $${values.length}`);
-    }
-
-    updates.push("updated_at = NOW()");
-
-    values.push(id, family.family_id);
-    const id_index = values.length - 1;
-    const family_index = values.length;
-
-    const updated = await db.one<{
-      id: string;
-      family_id: string;
-      category_id: string;
-      user_id: string;
-      amount: number | string;
-      transaction_date: string;
-      description: string | null;
-      created_at: string;
-      updated_at: string;
-    }>(
-      `UPDATE transaction
-     SET ${updates.join(", ")}
-     WHERE id = $${id_index}
-       AND family_id = $${family_index}
-     RETURNING id,
-               family_id,
-               category_id,
-               user_id,
-               amount,
-               transaction_date::text,
-               description,
-               created_at,
-               updated_at`,
-      values,
-    );
+    // Update the transaction and include category information
+    const updated = await prisma.transaction.update({
+      where: {
+        id: BigInt(id),
+      },
+      data: updateData,
+      include: {
+        category: {
+          select: {
+            name: true,
+            type: true,
+          },
+        },
+      },
+    });
 
     return jsonSuccess(
       {
-        ...updated,
+        id: updated.id.toString(),
+        family_id: updated.family_id.toString(),
+        category_id: updated.category_id.toString(),
+        user_id: updated.user_id,
         amount: Number(updated.amount),
+        transaction_date: updated.transaction_date.toISOString().split("T")[0],
+        description: updated.description,
+        created_at: updated.created_at.toISOString(),
+        updated_at: updated.updated_at.toISOString(),
+        category_name: updated.category.name,
+        category_type: updated.category.type as "income" | "expense",
       },
       {
         request_id,
@@ -343,14 +304,15 @@ export const DELETE = withRouteContext(async ({ request, family }) => {
     );
   }
 
-  const deleted = await db.result(
-    `DELETE FROM transaction
-     WHERE id = $1
-       AND family_id = $2`,
-    [parsed_query.data.id, family.family_id],
-  );
+  // Use deleteMany to delete with compound conditions
+  const result = await prisma.transaction.deleteMany({
+    where: {
+      id: BigInt(parsed_query.data.id),
+      family_id: BigInt(family.family_id),
+    },
+  });
 
-  if (deleted.rowCount === 0) {
+  if (result.count === 0) {
     throw new ApiError(404, "NOT_FOUND", "Transaction not found");
   }
 

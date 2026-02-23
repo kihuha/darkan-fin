@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import db from "@/utils/db";
+import { prisma } from "@/lib/prisma";
 import { family_invite_token_schema } from "@/lib/validations/family";
 import { jsonSuccess } from "@/utils/api-response";
 import { ApiError } from "@/utils/errors";
@@ -21,7 +21,9 @@ export const POST = withRouteContext(
       throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
     }
 
-    const parsed_body = family_invite_token_schema.safeParse(await request.json());
+    const parsed_body = family_invite_token_schema.safeParse(
+      await request.json(),
+    );
 
     if (!parsed_body.success) {
       throw new ApiError(
@@ -34,30 +36,38 @@ export const POST = withRouteContext(
 
     const token_hash = hashToken(parsed_body.data.token);
 
-    const invite = await db.oneOrNone<{ id: string; email: string }>(
-      `SELECT id, email
-       FROM family_invite
-       WHERE token_hash = $1
-         AND status = 'pending'
-         AND expires_at > NOW()`,
-      [token_hash],
-    );
+    // Find valid invite
+    const invite = await prisma.family_invite.findFirst({
+      where: {
+        token_hash,
+        status: "pending",
+        expires_at: {
+          gt: new Date(),
+        },
+      },
+    });
 
     if (!invite) {
       throw new ApiError(404, "NOT_FOUND", "Invite is invalid or expired");
     }
 
     if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
-      throw new ApiError(403, "FORBIDDEN", "Invite does not match this account");
+      throw new ApiError(
+        403,
+        "FORBIDDEN",
+        "Invite does not match this account",
+      );
     }
 
-    await db.none(
-      `UPDATE family_invite
-       SET status = 'revoked',
-           updated_at = NOW()
-       WHERE id = $1`,
-      [invite.id],
-    );
+    // Update invite status to revoked (declined)
+    await prisma.family_invite.update({
+      where: {
+        id: invite.id,
+      },
+      data: {
+        status: "revoked",
+      },
+    });
 
     return jsonSuccess(
       {

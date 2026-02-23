@@ -155,14 +155,62 @@ export const TransactionSection = () => {
       const result = await response.json();
 
       if (result.success) {
+        // Update the local state with the updated transaction
+        setTransactions((prev) =>
+          prev.map((t) =>
+            t.id.toString() === transactionId
+              ? {
+                  ...t,
+                  category_id: Number(result.data.category_id),
+                  category_name: result.data.category_name,
+                  category_type: result.data.category_type,
+                }
+              : t,
+          ),
+        );
         toast.success("Category updated successfully");
-        fetchTransactions();
       } else {
         toast.error(result.error || "Failed to update category");
       }
     } catch (error) {
       console.error("Error updating category:", error);
       toast.error("Failed to update category");
+    }
+  };
+
+  const handleBulkDelete = async (transactionIds: string[]) => {
+    try {
+      // Delete transactions sequentially or in parallel
+      const deletePromises = transactionIds.map((id) =>
+        fetch(`/api/transaction?id=${id}`, {
+          method: "DELETE",
+        }),
+      );
+
+      const responses = await Promise.all(deletePromises);
+
+      const allSuccessful = responses.every(
+        (response) => response.status === 204,
+      );
+
+      if (allSuccessful) {
+        // Update local state by removing deleted transactions
+        setTransactions((prev) =>
+          prev.filter((t) => !transactionIds.includes(t.id.toString())),
+        );
+        toast.success(
+          `Successfully deleted ${transactionIds.length} transaction(s)`,
+        );
+      } else {
+        toast.error("Some transactions failed to delete");
+        // Refresh to get accurate state
+        fetchTransactions();
+      }
+    } catch (error) {
+      console.error("Error deleting transactions:", error);
+      toast.error("Failed to delete transactions");
+      // Refresh to get accurate state
+      fetchTransactions();
     }
   };
 
@@ -355,6 +403,7 @@ export const TransactionSection = () => {
                   transactions={dayTransactions}
                   onEdit={handleEdit}
                   onCategoryChange={handleCategoryChange}
+                  onDelete={handleBulkDelete}
                   showDateColumn={false}
                 />
               </section>

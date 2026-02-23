@@ -1,4 +1,4 @@
-import db from "@/utils/db";
+import { prisma } from "@/lib/prisma";
 import { jsonSuccess } from "@/utils/api-response";
 import { ApiError } from "@/utils/errors";
 import { withRouteContext } from "@/utils/route";
@@ -8,68 +8,100 @@ export const GET = withRouteContext(async ({ family, request_id }) => {
     throw new ApiError(500, "INTERNAL_ERROR", "Route context is incomplete");
   }
 
-  await db.none(
-    `UPDATE family_invite
-     SET status = 'expired',
-         updated_at = NOW()
-     WHERE family_id = $1
-       AND status = 'pending'
-       AND expires_at <= NOW()`,
-    [family.family_id],
-  );
+  // Mark expired invites
+  await prisma.family_invite.updateMany({
+    where: {
+      family_id: BigInt(family.family_id),
+      status: "pending",
+      expires_at: {
+        lte: new Date(),
+      },
+    },
+    data: {
+      status: "expired",
+    },
+  });
 
-  const family_record = await db.one<{ id: string; name: string | null }>(
-    `SELECT id, name
-     FROM family
-     WHERE id = $1`,
-    [family.family_id],
-  );
+  // Get family record
+  const family_record = await prisma.family.findUnique({
+    where: {
+      id: BigInt(family.family_id),
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
 
-  const members = await db.any<{
-    id: string;
-    user_id: string;
-    role: "admin" | "member";
-    created_at: string;
-    name: string;
-    email: string;
-  }>(
-    `SELECT fm.id,
-            fm.user_id,
-            fm.role,
-            fm.created_at,
-            u.name,
-            u.email
-     FROM family_member fm
-     JOIN "user" u
-       ON u.id = fm.user_id
-     WHERE fm.family_id = $1
-     ORDER BY fm.created_at ASC`,
-    [family.family_id],
-  );
+  if (!family_record) {
+    throw new ApiError(404, "NOT_FOUND", "Family not found");
+  }
 
-  const invites =
-    family.role === "admin"
-      ? await db.any<{
-          id: string;
-          email: string;
-          status: "pending" | "accepted" | "revoked" | "expired";
-          expires_at: string;
-          created_at: string;
-        }>(
-          `SELECT id, email, status, expires_at, created_at
-           FROM family_invite
-           WHERE family_id = $1
-             AND status = 'pending'
-           ORDER BY created_at DESC`,
-          [family.family_id],
-        )
-      : [];
+  // Get family members
+  const members = await prisma.family_member.findMany({
+    where: {
+      family_id: BigInt(family.family_id),
+    },
+    include: {
+      user: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
+    },
+    orderBy: {
+      created_at: "asc",
+    },
+  });
+
+  // Format members
+  const formatted_members = members.map((m) => ({
+    id: m.id.toString(),
+    user_id: m.user_id,
+    role: m.role as "admin" | "member",
+    created_at: m.created_at.toISOString(),
+    name: m.user.name,
+    email: m.user.email,
+  }));
+
+  // Get invites (only for admins)
+  let invites: any[] = [];
+  if (family.role === "admin") {
+    const pending_invites = await prisma.family_invite.findMany({
+      where: {
+        family_id: BigInt(family.family_id),
+        status: "pending",
+      },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        expires_at: true,
+        created_at: true,
+      },
+      orderBy: {
+        created_at: "desc",
+      },
+    });
+
+    invites = pending_invites.map((inv) => ({
+      id: inv.id.toString(),
+      email: inv.email,
+      status: inv.status as "pending" | "accepted" | "revoked" | "expired",
+      expires_at: inv.expires_at.toISOString(),
+      created_at: inv.created_at.toISOString(),
+    }));
+  }
 
   return jsonSuccess(
     {
-      family: family_record,
+      family: {
+        id: family_record.id.toString(),
+        name: family_record.name,
+      },
       role: family.role,
-      members,
+      members: formatted_members,
       invites,
     },
     {

@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(6)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(6)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @db.Timestamptz(6)
+  user                  user      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model budget {
+  id          BigInt        @id @default(autoincrement())
+  family_id   BigInt
+  month       Int
+  year        Int
+  created_at  DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime      @default(now()) @db.Timestamptz(6)
+  family      family        @relation(fields: [family_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  budget_item budget_item[]
+
+  @@unique([family_id, month, year])
+  @@unique([id, family_id])
+  @@index([family_id], map: "idx_budget_family_id")
+  @@index([family_id, year, month], map: "idx_budget_family_year_month")
+}
+
+model budget_item {
+  id          BigInt   @id @default(autoincrement())
+  family_id   BigInt
+  budget_id   BigInt
+  category_id BigInt
+  amount      Decimal  @default(0) @db.Decimal(14, 2)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @db.Timestamptz(6)
+  budget      budget   @relation(fields: [budget_id, family_id], references: [id, family_id], onDelete: Cascade, onUpdate: NoAction)
+  category    category @relation(fields: [category_id, family_id], references: [id, family_id], onUpdate: NoAction)
+  family      family   @relation(fields: [family_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([budget_id, category_id])
+  @@index([family_id], map: "idx_budget_item_family_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model category {
+  id          BigInt        @id @default(autoincrement())
+  family_id   BigInt
+  name        String        @db.VarChar(100)
+  type        String        @db.VarChar(10)
+  amount      Decimal       @default(0) @db.Decimal(14, 2)
+  repeats     Boolean       @default(false)
+  description String?
+  tags        String[]      @default([])
+  created_at  DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime      @default(now()) @db.Timestamptz(6)
+  budget_item budget_item[]
+  family      family        @relation(fields: [family_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  transaction transaction[]
+
+  @@unique([id, family_id])
+  @@index([family_id], map: "idx_category_family_id")
+}
+
+model family {
+  id            BigInt          @id @default(autoincrement())
+  name          String?         @db.VarChar(100)
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime        @default(now()) @db.Timestamptz(6)
+  budget        budget[]
+  budget_item   budget_item[]
+  category      category[]
+  family_invite family_invite[]
+  family_member family_member[]
+  transaction   transaction[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model family_invite {
+  id                 BigInt   @id @default(autoincrement())
+  family_id          BigInt
+  email              String
+  token_hash         String
+  invited_by_user_id String
+  status             String   @default("pending") @db.VarChar(20)
+  expires_at         DateTime @db.Timestamptz(6)
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime @default(now()) @db.Timestamptz(6)
+  family             family   @relation(fields: [family_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user               user     @relation(fields: [invited_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([family_id], map: "idx_family_invite_family_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model family_member {
+  id         BigInt   @id @default(autoincrement())
+  family_id  BigInt
+  user_id    String   @unique
+  role       String   @default("admin") @db.VarChar(20)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  family     family   @relation(fields: [family_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user       user     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([family_id, user_id])
+  @@unique([family_id, user_id], map: "uq_family_member_family_user")
+  @@index([family_id], map: "idx_family_member_family_id")
+  @@index([user_id], map: "idx_family_member_user_id")
+}
+
+model session {
+  id        String   @id
+  expiresAt DateTime @db.Timestamptz(6)
+  token     String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @db.Timestamptz(6)
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId])
+}
+
+model transaction {
+  id               BigInt   @id @default(autoincrement())
+  family_id        BigInt
+  category_id      BigInt
+  user_id          String   @db.VarChar(255)
+  amount           Decimal  @db.Decimal(14, 2)
+  transaction_date DateTime @db.Date
+  description      String?
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  category         category @relation(fields: [category_id, family_id], references: [id, family_id], onUpdate: NoAction)
+  family           family   @relation(fields: [family_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([family_id, category_id], map: "idx_transaction_family_category")
+  @@index([family_id, transaction_date(sort: Desc)], map: "idx_transaction_family_date")
+  @@index([family_id], map: "idx_transaction_family_id")
+  @@index([family_id, user_id], map: "idx_transaction_family_user")
+  @@index([user_id, transaction_date(sort: Desc)], map: "idx_transaction_user_date")
+}
+
+model user {
+  id            String          @id
+  name          String
+  email         String          @unique
+  emailVerified Boolean
+  image         String?
+  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime        @default(now()) @db.Timestamptz(6)
+  account       account[]
+  family_invite family_invite[]
+  family_member family_member?
+  session       session[]
+}
+
+model verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([identifier])
+}

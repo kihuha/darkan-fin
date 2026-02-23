@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import db from "@/utils/db";
+import { prisma } from "@/lib/prisma";
 import { family_invite_schema } from "@/lib/validations/family";
 import { jsonSuccess } from "@/utils/api-response";
 import { ApiError } from "@/utils/errors";
@@ -42,39 +42,59 @@ export const POST = withRouteContext(
 
     const email = parsed_body.data.email;
 
-    const member = await db.oneOrNone<{ id: string }>(
-      `SELECT fm.id
-       FROM family_member fm
-       JOIN "user" u ON u.id = fm.user_id
-       WHERE fm.family_id = $1
-         AND LOWER(u.email) = $2`,
-      [family.family_id, email],
-    );
+    // Check if user is already a member
+    const member = await prisma.family_member.findFirst({
+      where: {
+        family_id: BigInt(family.family_id),
+        user: {
+          email: {
+            equals: email,
+            mode: "insensitive",
+          },
+        },
+      },
+    });
 
     if (member) {
-      throw new ApiError(409, "CONFLICT", "This email is already in your family");
+      throw new ApiError(
+        409,
+        "CONFLICT",
+        "This email is already in your family",
+      );
     }
 
-    await db.none(
-      `UPDATE family_invite
-       SET status = 'expired',
-           updated_at = NOW()
-       WHERE family_id = $1
-         AND LOWER(email) = $2
-         AND status = 'pending'
-         AND expires_at <= NOW()`,
-      [family.family_id, email],
-    );
+    // Mark expired invites
+    await prisma.family_invite.updateMany({
+      where: {
+        family_id: BigInt(family.family_id),
+        email: {
+          equals: email,
+          mode: "insensitive",
+        },
+        status: "pending",
+        expires_at: {
+          lte: new Date(),
+        },
+      },
+      data: {
+        status: "expired",
+      },
+    });
 
-    const pending_invite = await db.oneOrNone<{ id: string }>(
-      `SELECT id
-       FROM family_invite
-       WHERE family_id = $1
-         AND LOWER(email) = $2
-         AND status = 'pending'
-         AND expires_at > NOW()`,
-      [family.family_id, email],
-    );
+    // Check for pending invite
+    const pending_invite = await prisma.family_invite.findFirst({
+      where: {
+        family_id: BigInt(family.family_id),
+        email: {
+          equals: email,
+          mode: "insensitive",
+        },
+        status: "pending",
+        expires_at: {
+          gt: new Date(),
+        },
+      },
+    });
 
     if (pending_invite) {
       throw new ApiError(
@@ -90,18 +110,16 @@ export const POST = withRouteContext(
       Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     );
 
-    const invite = await db.one<{
-      id: string;
-      email: string;
-      status: "pending" | "accepted" | "revoked" | "expired";
-      expires_at: string;
-      created_at: string;
-    }>(
-      `INSERT INTO family_invite (family_id, email, token_hash, invited_by_user_id, expires_at)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, email, status, expires_at, created_at`,
-      [family.family_id, email, token_hash, user.user_id, expires_at],
-    );
+    // Create invite
+    const invite = await prisma.family_invite.create({
+      data: {
+        family_id: BigInt(family.family_id),
+        email,
+        token_hash,
+        invited_by_user_id: user.user_id,
+        expires_at,
+      },
+    });
 
     const invite_link = buildInviteLink(token);
 
@@ -115,7 +133,17 @@ export const POST = withRouteContext(
 
     return jsonSuccess(
       {
-        invite,
+        invite: {
+          id: invite.id.toString(),
+          email: invite.email,
+          status: invite.status as
+            | "pending"
+            | "accepted"
+            | "revoked"
+            | "expired",
+          expires_at: invite.expires_at.toISOString(),
+          created_at: invite.created_at.toISOString(),
+        },
         invite_link,
       },
       {
