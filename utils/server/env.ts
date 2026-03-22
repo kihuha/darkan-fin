@@ -32,6 +32,7 @@ export function getServerEnv(): ServerEnv {
   const parsed = envSchema.safeParse(process.env);
 
   if (!parsed.success) {
+    console.log("Environment variable validation failed:", parsed.error.issues);
     throw new ApiError(
       500,
       "INTERNAL_ERROR",
