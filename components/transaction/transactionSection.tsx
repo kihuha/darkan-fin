@@ -35,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { TransactionFilters } from "./transactionFilters";
+import { apiUrl } from "@/lib/api-url";
 
 type Transaction = {
   id: number;
@@ -79,7 +80,7 @@ export const TransactionSection = () => {
       });
 
       const response = await fetch(
-        `/api/transaction?${searchParams.toString()}`,
+        apiUrl(`/api/transaction?${searchParams.toString()}`),
       );
       const result = await response.json();
 
@@ -115,7 +116,7 @@ export const TransactionSection = () => {
 
     try {
       const response = await fetch(
-        `/api/transaction?id=${transactionToDelete.id}`,
+        apiUrl(`/api/transaction?id=${transactionToDelete.id}`),
         {
           method: "DELETE",
         },
@@ -141,7 +142,7 @@ export const TransactionSection = () => {
     categoryId: string,
   ) => {
     try {
-      const response = await fetch("/api/transaction", {
+      const response = await fetch(apiUrl("/api/transaction"), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -182,7 +183,7 @@ export const TransactionSection = () => {
     try {
       // Delete transactions sequentially or in parallel
       const deletePromises = transactionIds.map((id) =>
-        fetch(`/api/transaction?id=${id}`, {
+        fetch(apiUrl(`/api/transaction?id=${id}`), {
           method: "DELETE",
         }),
       );
@@ -223,7 +224,7 @@ export const TransactionSection = () => {
   const handleRecategorize = async () => {
     try {
       setIsRecategorizing(true);
-      const response = await fetch("/api/category?action=recategorize", {
+      const response = await fetch(apiUrl("/api/category?action=recategorize"), {
         method: "POST",
       });
       const result = await response.json();

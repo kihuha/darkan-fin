@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { Copy, UserPlus } from "lucide-react";
 import { FamilyInviteForm } from "@/components/forms/familyInviteForm";
+import { apiUrl } from "@/lib/api-url";
 
 type FamilyMember = {
   id: string;
@@ -76,7 +77,7 @@ export function FamilySettingsSection() {
   const fetchFamily = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/family");
+      const response = await fetch(apiUrl("/api/family"));
       const result = await response.json();
 
       if (!response.ok || !result.success) {
@@ -118,7 +119,7 @@ export function FamilySettingsSection() {
 
   const handleRevoke = async (inviteId: string) => {
     try {
-      const response = await fetch("/api/family/invite/revoke", {
+      const response = await fetch(apiUrl("/api/family/invite/revoke"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

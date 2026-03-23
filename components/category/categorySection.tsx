@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "../header";
+import { apiUrl } from "@/lib/api-url";
 import {
   Item,
   ItemActions,
@@ -58,7 +59,7 @@ export const CategorySection = () => {
   const fetchCategories = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/category");
+      const response = await fetch(apiUrl("/api/category"));
       const result = await response.json();
 
       if (result.success) {
@@ -91,7 +92,7 @@ export const CategorySection = () => {
     if (!categoryToDelete) return;
 
     try {
-      const response = await fetch(`/api/category?id=${categoryToDelete.id}`, {
+      const response = await fetch(apiUrl(`/api/category?id=${categoryToDelete.id}`), {
         method: "DELETE",
       });
 

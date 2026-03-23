@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiUrl } from "@/lib/api-url";
 
 type InvitePreview = {
   family_name: string | null;
@@ -35,7 +36,7 @@ export function InviteAcceptanceCard({ token }: InviteAcceptanceCardProps) {
       try {
         setIsLoading(true);
         const response = await fetch(
-          `/api/family/invite/preview?token=${encodeURIComponent(token)}`
+          apiUrl(`/api/family/invite/preview?token=${encodeURIComponent(token)}`)
         );
         const result = await response.json();
 
@@ -59,7 +60,7 @@ export function InviteAcceptanceCard({ token }: InviteAcceptanceCardProps) {
   const handleAccept = async () => {
     try {
       setIsSubmitting(true);
-      const response = await fetch("/api/family/invite/accept", {
+      const response = await fetch(apiUrl("/api/family/invite/accept"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -87,7 +88,7 @@ export function InviteAcceptanceCard({ token }: InviteAcceptanceCardProps) {
 
   const handleDecline = async () => {
     try {
-      await fetch("/api/family/invite/decline", {
+      await fetch(apiUrl("/api/family/invite/decline"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -30,6 +30,7 @@ import { format } from "date-fns";
 import { Trash2 } from "lucide-react";
 import { TransactionWithCategory } from "./transactionSection";
 import { toast } from "sonner";
+import { apiUrl } from "@/lib/api-url";
 
 interface TransactionTableProps {
   transactions: TransactionWithCategory[];
@@ -59,7 +60,7 @@ export function TransactionTable({
     const fetchCategories = async () => {
       try {
         setIsLoadingCategories(true);
-        const response = await fetch("/api/category");
+        const response = await fetch(apiUrl("/api/category"));
         const result = await response.json();
 
         if (result.success) {

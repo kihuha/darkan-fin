@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react";
 import { toast } from "sonner";
 import { AiDialog } from "../ai-dialog";
+import { apiUrl } from "@/lib/api-url";
 
 interface CategoryBudgetItem {
   category_id: string;
@@ -68,7 +69,7 @@ export function BudgetSpreadsheet({
         }),
       );
 
-      const response = await fetch("/api/budget", {
+      const response = await fetch(apiUrl("/api/budget"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

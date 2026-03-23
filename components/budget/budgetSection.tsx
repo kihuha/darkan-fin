@@ -12,6 +12,7 @@ import { BudgetSpreadsheet } from "./budgetSpreadsheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { Header } from "../header";
+import { apiUrl } from "@/lib/api-url";
 
 interface BudgetData {
   id: string;
@@ -60,7 +61,7 @@ export const BudgetSection = () => {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `/api/budget?month=${selectedMonth}&year=${selectedYear}`,
+        apiUrl(`/api/budget?month=${selectedMonth}&year=${selectedYear}`),
       );
       const result = await response.json();
 

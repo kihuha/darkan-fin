@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { apiUrl } from "@/lib/api-url";
 
 type FamilyInviteFormProps = {
   disabled?: boolean;
@@ -45,7 +46,7 @@ export function FamilyInviteForm({
 
   const onSubmit = async (data: FamilyInviteInput) => {
     try {
-      const response = await fetch("/api/family/invite", {
+      const response = await fetch(apiUrl("/api/family/invite"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

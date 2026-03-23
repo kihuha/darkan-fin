@@ -16,6 +16,7 @@ import {
 import type { VariantProps } from "class-variance-authority";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { PDFDocument } from "pdf-lib";
+import { apiUrl } from "@/lib/api-url";
 
 const ACCEPTED_TYPES = [".pdf", "application/pdf"].join(",");
 
@@ -144,7 +145,7 @@ export function StatementImportDialog({
       // Append passwords for protected files
       formData.append("passwords", JSON.stringify(passwords));
 
-      const response = await fetch("/api/transaction/import/statement", {
+      const response = await fetch(apiUrl("/api/transaction/import/statement"), {
         method: "POST",
         body: formData,
       });

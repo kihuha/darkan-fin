@@ -31,6 +31,7 @@ import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import z from "zod";
 import { TransactionWithCategory } from "../transaction/transactionSection";
+import { apiUrl } from "@/lib/api-url";
 
 interface TransactionFormProps {
   transaction?: {
@@ -85,7 +86,7 @@ export function TransactionForm({
     const fetchCategories = async () => {
       try {
         setIsLoadingCategories(true);
-        const response = await fetch("/api/category");
+        const response = await fetch(apiUrl("/api/category"));
         const result = await response.json();
 
         if (result.success) {
@@ -106,7 +107,7 @@ export function TransactionForm({
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
-      const url = "/api/transaction";
+      const url = apiUrl("/api/transaction");
       const method = isEditing ? "PATCH" : "POST";
       const payload = isEditing
         ? { ...data, id: transaction!.id, amount: parseFloat(data.amount) }

@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
 import { cn, MONTHS } from "@/lib/utils";
 import { Header } from "@/components/header";
+import { apiUrl } from "@/lib/api-url";
 
 type TransactionWithCategory = {
   id: number;
@@ -83,7 +84,7 @@ export default function DashboardPage() {
 
       // Fetch budget for selected month/year
       const budgetResponse = await fetch(
-        `/api/budget?month=${selectedMonth}&year=${selectedYear}`,
+        apiUrl(`/api/budget?month=${selectedMonth}&year=${selectedYear}`),
       );
       const budgetResult = await budgetResponse.json();
 
@@ -99,7 +100,7 @@ export default function DashboardPage() {
 
       // Fetch transactions for selected month/year
       const transactionResponse = await fetch(
-        `/api/transaction?month=${selectedMonth}&year=${selectedYear}`,
+        apiUrl(`/api/transaction?month=${selectedMonth}&year=${selectedYear}`),
       );
       const transactionResult = await transactionResponse.json();
 

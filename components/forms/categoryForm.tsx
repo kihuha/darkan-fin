@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, X } from "lucide-react";
 import z from "zod";
+import { apiUrl } from "@/lib/api-url";
 
 interface CategoryFormProps {
   category?: Category | null;
@@ -118,7 +119,7 @@ export function CategoryForm({
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
-      const url = "/api/category";
+      const url = apiUrl("/api/category");
       const method = isEditing ? "PATCH" : "POST";
       const payload = isEditing
         ? {
