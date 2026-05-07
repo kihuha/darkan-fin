@@ -45,8 +45,12 @@ const formSchema = z.object({
     .max(100, "Category name must be less than 100 characters"),
   type: z.enum(["income", "expense"]),
   amount: z
-    .string({ error: "Amount must be a number" })
-    .min(0, "Amount must be positive")
+    .string()
+    .refine(
+      (value) =>
+        value === "" || (!Number.isNaN(Number(value)) && Number(value) >= 0),
+      "Amount must be a valid positive number",
+    )
     .optional(),
   repeats: z.boolean(),
   description: z
@@ -163,6 +167,9 @@ export function CategoryForm({
     }
   };
 
+  const currentTags = form.watch("tags") ?? [];
+  const currentDescriptionLength = (form.watch("description") ?? "").length;
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -176,9 +183,12 @@ export function CategoryForm({
                 <Input
                   placeholder="e.g., Groceries, Transportation"
                   {...field}
+                  autoFocus
                 />
               </FormControl>
-              <FormDescription>The name of your category</FormDescription>
+              <FormDescription>
+                Choose a clear, recognizable category name.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -202,7 +212,8 @@ export function CategoryForm({
                 </SelectContent>
               </Select>
               <FormDescription>
-                Whether this is an income or expense category
+                Select whether transactions in this category are income or
+                expense.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -213,7 +224,7 @@ export function CategoryForm({
           control={form.control}
           name="repeats"
           render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border bg-muted/20 p-4">
               <FormControl>
                 <Checkbox
                   checked={field.value}
@@ -223,7 +234,7 @@ export function CategoryForm({
               <div className="space-y-1 leading-none">
                 <FormLabel>Recurring category</FormLabel>
                 <FormDescription>
-                  This category repeats with the same amount each month
+                  Enable if this category typically repeats every month.
                 </FormDescription>
               </div>
             </FormItem>
@@ -248,7 +259,7 @@ export function CategoryForm({
                   />
                 </FormControl>
                 <FormDescription>
-                  Budget amount for recurring category
+                  Monthly budget amount used for recurring planning.
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -265,14 +276,19 @@ export function CategoryForm({
               <FormControl>
                 <Textarea
                   placeholder="Optional description for this category"
-                  className="resize-none"
+                  className="min-h-20 resize-none"
                   {...field}
                   value={field.value || ""}
                 />
               </FormControl>
-              <FormDescription>
-                A brief description of what this category is for
-              </FormDescription>
+              <div className="flex items-center justify-between">
+                <FormDescription>
+                  Brief context about when this category should be used.
+                </FormDescription>
+                <span className="text-xs text-muted-foreground">
+                  {currentDescriptionLength}/500
+                </span>
+              </div>
               <FormMessage />
             </FormItem>
           )}
@@ -287,7 +303,7 @@ export function CategoryForm({
               <FormControl>
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-2">
-                    {(field.value ?? []).map((tag) => (
+                    {currentTags.map((tag) => (
                       <Badge key={tag} variant="secondary" className="gap-1">
                         {tag}
                         <button
@@ -306,6 +322,11 @@ export function CategoryForm({
                       placeholder="Type a tag and press Enter"
                       value={tagInput}
                       onChange={(event) => setTagInput(event.target.value)}
+                      onBlur={() => {
+                        if (tagInput.trim()) {
+                          addTags(tagInput);
+                        }
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
@@ -317,6 +338,7 @@ export function CategoryForm({
                       type="button"
                       variant="secondary"
                       onClick={() => addTags(tagInput)}
+                      disabled={!tagInput.trim()}
                     >
                       Add
                     </Button>
@@ -324,14 +346,14 @@ export function CategoryForm({
                 </div>
               </FormControl>
               <FormDescription>
-                Separate tags with commas, semicolons, or new lines
+                Separate tags with commas, semicolons, or new lines.
               </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <div className="flex justify-between gap-3">
+        <div className="flex justify-between gap-3 border-t pt-2">
           <div>
             {isEditing && onDelete && (
               <Button

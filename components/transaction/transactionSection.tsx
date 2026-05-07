@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { TransactionTable } from "./transactionTable";
 import { TransactionForm } from "../forms/transactionForm";
 import { StatementImportDialog } from "./statementImportDialog";
+import { TransactionFilters } from "./transactionFilters";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,16 +26,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Empty,
-  EmptyHeader,
-  EmptyTitle,
-  EmptyDescription,
-  EmptyContent,
-} from "@/components/ui/empty";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { TransactionFilters } from "./transactionFilters";
+import { type Category } from "@/lib/validations/category";
+import { cn, MONTHS } from "@/lib/utils";
 
 type Transaction = {
   id: number;
@@ -49,11 +51,20 @@ export type TransactionWithCategory = Transaction & {
   category_type: "income" | "expense";
 };
 
+const formatCurrency = (amount: number) =>
+  amount.toLocaleString("en-KE", {
+    style: "currency",
+    currency: "KES",
+    maximumFractionDigits: 0,
+  });
+
 export const TransactionSection = () => {
   const [transactions, setTransactions] = useState<TransactionWithCategory[]>(
     [],
   );
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isRecategorizing, setIsRecategorizing] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] =
@@ -70,35 +81,53 @@ export const TransactionSection = () => {
     new Date().getFullYear(),
   );
 
+  const yearOptions = Array.from(
+    { length: 11 },
+    (_, i) => new Date().getFullYear() - i,
+  );
+  const monthOptions = MONTHS.map((label, i) => ({ label, value: i + 1 }));
+
   const fetchTransactions = useCallback(async () => {
     try {
       setIsLoading(true);
-      const searchParams = new URLSearchParams({
+      const params = new URLSearchParams({
         month: selectedMonth.toString(),
         year: selectedYear.toString(),
       });
-
-      const response = await fetch(
-        `/api/transaction?${searchParams.toString()}`,
-      );
+      const response = await fetch(`/api/transaction?${params}`);
       const result = await response.json();
-
       if (response.ok && result.success) {
         setTransactions(result.data.rows);
       } else {
         toast.error(result.error || "Failed to load transactions");
       }
-    } catch (error) {
-      console.error("Error fetching transactions:", error);
+    } catch {
       toast.error("Failed to load transactions");
     } finally {
       setIsLoading(false);
     }
   }, [selectedMonth, selectedYear]);
 
+  // Fetch categories once for the whole page; pass down to table instances
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setIsLoadingCategories(true);
+        const response = await fetch("/api/category");
+        const result = await response.json();
+        if (result.success) setCategories(result.data);
+      } catch {
+        // silently fail — category select will be disabled
+      } finally {
+        setIsLoadingCategories(false);
+      }
+    };
+    fetchCategories();
+  }, []);
+
   useEffect(() => {
     fetchTransactions();
-  }, [selectedMonth, selectedYear, fetchTransactions]);
+  }, [fetchTransactions]);
 
   const handleEdit = (transaction: TransactionWithCategory) => {
     setSelectedTransaction(transaction);
@@ -112,7 +141,6 @@ export const TransactionSection = () => {
 
   const confirmDelete = async () => {
     if (!transactionToDelete) return;
-
     try {
       const response = await fetch(
         `/api/transaction?id=${transactionToDelete.id}`,
@@ -120,16 +148,14 @@ export const TransactionSection = () => {
           method: "DELETE",
         },
       );
-
       if (response.status === 204) {
-        toast.success("Transaction deleted successfully");
+        toast.success("Transaction deleted");
         fetchTransactions();
       } else {
         const result = await response.json();
         toast.error(result.error || "Failed to delete transaction");
       }
-    } catch (error) {
-      console.error("Error deleting transaction:", error);
+    } catch {
       toast.error("Failed to delete transaction");
     } finally {
       setTransactionToDelete(null);
@@ -143,19 +169,11 @@ export const TransactionSection = () => {
     try {
       const response = await fetch("/api/transaction", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: transactionId,
-          category_id: categoryId,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: transactionId, category_id: categoryId }),
       });
-
       const result = await response.json();
-
       if (result.success) {
-        // Update the local state with the updated transaction
         setTransactions((prev) =>
           prev.map((t) =>
             t.id.toString() === transactionId
@@ -168,48 +186,35 @@ export const TransactionSection = () => {
               : t,
           ),
         );
-        toast.success("Category updated successfully");
+        toast.success("Category updated");
       } else {
         toast.error(result.error || "Failed to update category");
       }
-    } catch (error) {
-      console.error("Error updating category:", error);
+    } catch {
       toast.error("Failed to update category");
     }
   };
 
   const handleBulkDelete = async (transactionIds: string[]) => {
     try {
-      // Delete transactions sequentially or in parallel
-      const deletePromises = transactionIds.map((id) =>
-        fetch(`/api/transaction?id=${id}`, {
-          method: "DELETE",
-        }),
+      const responses = await Promise.all(
+        transactionIds.map((id) =>
+          fetch(`/api/transaction?id=${id}`, { method: "DELETE" }),
+        ),
       );
-
-      const responses = await Promise.all(deletePromises);
-
-      const allSuccessful = responses.every(
-        (response) => response.status === 204,
-      );
-
-      if (allSuccessful) {
-        // Update local state by removing deleted transactions
+      if (responses.every((r) => r.status === 204)) {
         setTransactions((prev) =>
           prev.filter((t) => !transactionIds.includes(t.id.toString())),
         );
         toast.success(
-          `Successfully deleted ${transactionIds.length} transaction(s)`,
+          `Deleted ${transactionIds.length} transaction${transactionIds.length === 1 ? "" : "s"}`,
         );
       } else {
         toast.error("Some transactions failed to delete");
-        // Refresh to get accurate state
         fetchTransactions();
       }
-    } catch (error) {
-      console.error("Error deleting transactions:", error);
+    } catch {
       toast.error("Failed to delete transactions");
-      // Refresh to get accurate state
       fetchTransactions();
     }
   };
@@ -220,6 +225,11 @@ export const TransactionSection = () => {
     fetchTransactions();
   };
 
+  const handleDialogChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) setSelectedTransaction(null);
+  };
+
   const handleRecategorize = async () => {
     try {
       setIsRecategorizing(true);
@@ -227,201 +237,242 @@ export const TransactionSection = () => {
         method: "POST",
       });
       const result = await response.json();
-
       if (!response.ok || !result.success) {
         toast.error(result.error || "Failed to recategorize transactions");
         return;
       }
-
       const { updated, scanned } = result.data ?? {};
       toast.success(
-        `Recategorized ${updated ?? 0} transactions${
-          scanned ? ` (scanned ${scanned})` : ""
-        }.`,
+        `Recategorized ${updated ?? 0} transactions${scanned ? ` (scanned ${scanned})` : ""}`,
       );
       fetchTransactions();
-    } catch (error) {
-      console.error("Error recategorizing transactions:", error);
+    } catch {
       toast.error("Failed to recategorize transactions");
     } finally {
       setIsRecategorizing(false);
     }
   };
 
-  const handleDialogChange = (open: boolean) => {
-    setIsDialogOpen(open);
-    if (!open) {
-      setSelectedTransaction(null);
-    }
-  };
-
-  // Get unique categories from transactions
   const uniqueCategories = Array.from(
     new Set(transactions.map((t) => t.category_name)),
   ).sort();
 
-  // Filter transactions based on selected category
   const filteredTransactions =
     selectedCategoryFilter === null
       ? transactions
       : transactions.filter((t) => t.category_name === selectedCategoryFilter);
 
-  // Group transactions by day
   const groupedTransactions = Object.entries(
     filteredTransactions.reduce<Record<string, TransactionWithCategory[]>>(
-      (groups, transaction) => {
-        const dateKey = transaction.transaction_date.split("T")[0];
-
-        if (!groups[dateKey]) {
-          groups[dateKey] = [];
-        }
-
-        groups[dateKey].push(transaction);
+      (groups, t) => {
+        const dateKey = t.transaction_date.split("T")[0];
+        if (!groups[dateKey]) groups[dateKey] = [];
+        groups[dateKey].push(t);
         return groups;
       },
       {},
     ),
-  ).sort(([left], [right]) => right.localeCompare(left));
+  ).sort(([a], [b]) => b.localeCompare(a));
+
+  const newTransactionDialog = (
+    <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
+      <DialogTrigger asChild>
+        <Button className="shrink-0 gap-1.5">
+          <Plus className="h-4 w-4" />
+          New Transaction
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-125">
+        <DialogHeader>
+          <DialogTitle>
+            {selectedTransaction ? "Edit Transaction" : "New Transaction"}
+          </DialogTitle>
+          <DialogDescription>
+            {selectedTransaction
+              ? "Update the transaction details below"
+              : "Add a transaction to track your finances"}
+          </DialogDescription>
+        </DialogHeader>
+        <TransactionForm
+          transaction={selectedTransaction}
+          onSuccess={handleSuccess}
+          onDelete={handleDelete}
+          onCancel={() => handleDialogChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  );
 
   if (isLoading) {
     return (
-      <div className="relative left-1/2 right-1/2 min-h-screen w-screen -translate-x-1/2 overflow-hidden bg-background px-4 py-4 md:px-6 md:py-6">
-        <div className="mx-auto max-w-7xl space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Skeleton className="h-8 w-40" />
-            <Skeleton className="h-10 w-full sm:w-40" />
+      <div>
+        <div className="mb-6 flex items-start justify-between border-b pb-6 dark:border-zinc-800">
+          <div className="space-y-1.5">
+            <Skeleton className="h-7 w-36" />
+            <Skeleton className="h-4 w-52" />
           </div>
-          <div className="space-y-2">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-36" />
           </div>
+        </div>
+        <div className="mb-6 flex gap-2">
+          <Skeleton className="h-9 w-48" />
+          <Skeleton className="h-9 w-28" />
+          <Skeleton className="h-9 w-32" />
+        </div>
+        <div className="space-y-6">
+          {[1, 2].map((i) => (
+            <div key={i}>
+              <Skeleton className="mb-3 h-4 w-36" />
+              {[1, 2, 3].map((j) => (
+                <div
+                  key={j}
+                  className="flex items-center justify-between border-b py-3 dark:border-zinc-800"
+                >
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative left-1/2 right-1/2 min-h-screen w-screen -translate-x-1/2 overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute -left-24 -top-16 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl dark:bg-indigo-400/10" />
-      <div className="pointer-events-none absolute -bottom-16 -right-16 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl dark:bg-emerald-400/10" />
-      <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-4 md:px-6 md:py-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Personal Finance
-            </p>
-            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Transactions
-            </h2>
-            <p className="text-sm text-muted-foreground sm:text-base">
-              Track all your income and expenses
-            </p>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <TransactionFilters
-              categories={uniqueCategories}
-              selectedCategory={selectedCategoryFilter}
-              onCategoryChange={setSelectedCategoryFilter}
-              selectedMonth={selectedMonth}
-              selectedYear={selectedYear}
-              onMonthChange={setSelectedMonth}
-              onYearChange={setSelectedYear}
-              onRecategorize={handleRecategorize}
-              isRecategorizing={isRecategorizing}
-              onImported={fetchTransactions}
-            />
+    <div>
+      {/* Header */}
+      <div className="mb-6 flex items-start justify-between flex-wrap gap-y-4 border-b pb-6 dark:border-zinc-800">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Transactions
+          </h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {transactions.length} transactions · {MONTHS[selectedMonth - 1]}{" "}
+            {selectedYear}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select
+            value={selectedMonth.toString()}
+            onValueChange={(v) => setSelectedMonth(parseInt(v))}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((m) => (
+                <SelectItem key={m.value} value={m.value.toString()}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(v) => setSelectedYear(parseInt(v))}
+          >
+            <SelectTrigger className="w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => (
+                <SelectItem key={y} value={y.toString()}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {newTransactionDialog}
+        </div>
+      </div>
 
-            <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
-              <DialogTrigger asChild>
-                <Button className="w-full sm:w-auto">
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Transaction
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-125">
-                <DialogHeader>
-                  <DialogTitle>
-                    {selectedTransaction ? "Edit Transaction" : "New Transaction"}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {selectedTransaction
-                      ? "Update the details of your transaction"
-                      : "Add a new transaction to track your finances"}
-                  </DialogDescription>
-                </DialogHeader>
-                <TransactionForm
-                  transaction={selectedTransaction}
-                  onSuccess={handleSuccess}
-                  onDelete={handleDelete}
-                  onCancel={() => handleDialogChange(false)}
-                />
-              </DialogContent>
-            </Dialog>
+      {/* Filters row */}
+      <div className="mb-6">
+        <TransactionFilters
+          categories={uniqueCategories}
+          selectedCategory={selectedCategoryFilter}
+          onCategoryChange={setSelectedCategoryFilter}
+          onRecategorize={handleRecategorize}
+          isRecategorizing={isRecategorizing}
+          onImported={fetchTransactions}
+        />
+      </div>
+
+      {/* Content */}
+      {transactions.length === 0 ? (
+        <div className="py-16 text-center">
+          <p className="text-sm font-medium">No transactions in this period</p>
+          <p className="mt-1 mb-4 text-sm text-muted-foreground md:text-xs">
+            Try a different month, or import a bank statement
+          </p>
+          <div className="flex justify-center gap-2">
+            <StatementImportDialog
+              onImported={fetchTransactions}
+              triggerVariant="outline"
+            />
+            <Button onClick={() => setIsDialogOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Transaction
+            </Button>
           </div>
         </div>
+      ) : filteredTransactions.length === 0 ? (
+        <div className="py-16 text-center">
+          <p className="text-sm text-muted-foreground">
+            No transactions in this category
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {groupedTransactions.map(([dateKey, dayTransactions]) => {
+            const [year, month, day] = dateKey.split("-").map(Number);
+            const dayDate = new Date(year, month - 1, day);
 
-        {transactions.length === 0 ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>No transactions in this period</EmptyTitle>
-              <EmptyDescription>
-                Try selecting a different month or year, or add a new transaction
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
-                <StatementImportDialog
-                  onImported={fetchTransactions}
-                  triggerClassName="w-full sm:w-auto"
-                  triggerVariant="outline"
+            const dayNet = dayTransactions.reduce(
+              (sum, t) =>
+                sum +
+                (t.category_type === "income"
+                  ? Number(t.amount)
+                  : -Number(t.amount)),
+              0,
+            );
+
+            return (
+              <section key={dateKey}>
+                <div className="mb-1 flex items-center gap-4 border-b pb-2 dark:border-zinc-800">
+                  <span className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground md:text-xs">
+                    {format(dayDate, "EEEE, MMM d")}
+                  </span>
+                  <span
+                    className={cn(
+                      "ml-auto text-sm tabular-nums font-medium md:text-xs",
+                      dayNet >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {dayNet >= 0 ? "+" : ""}
+                    {formatCurrency(dayNet)}
+                  </span>
+                </div>
+                <TransactionTable
+                  transactions={dayTransactions}
+                  categories={categories}
+                  isLoadingCategories={isLoadingCategories}
+                  onEdit={handleEdit}
+                  onCategoryChange={handleCategoryChange}
+                  onDelete={handleBulkDelete}
+                  showDateColumn={false}
                 />
-                <Button
-                  onClick={() => setIsDialogOpen(true)}
-                  className="hidden w-full md:w-auto"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Transaction
-                </Button>
-              </div>
-            </EmptyContent>
-          </Empty>
-        ) : filteredTransactions.length === 0 ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>No transactions in this category</EmptyTitle>
-              <EmptyDescription>
-                Try selecting a different category or add a new transaction
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <div className="space-y-5">
-            {groupedTransactions.map(([dateKey, dayTransactions]) => {
-              const [year, month, day] = dateKey.split("-").map(Number);
-              const dayDate = new Date(year, month - 1, day);
-
-              return (
-                <section key={dateKey} className="space-y-2">
-                  <h3 className="text-sm font-medium text-muted-foreground">
-                    {format(dayDate, "EEEE, MMM d, yyyy")}
-                  </h3>
-                  <div className="rounded-xl border bg-card/80 p-1 backdrop-blur">
-                    <TransactionTable
-                      transactions={dayTransactions}
-                      onEdit={handleEdit}
-                      onCategoryChange={handleCategoryChange}
-                      onDelete={handleBulkDelete}
-                      showDateColumn={false}
-                    />
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
 
       <AlertDialog
         open={!!transactionToDelete}
@@ -429,10 +480,10 @@ export const TransactionSection = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Transaction</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              transaction.
+              Delete &ldquo;{transactionToDelete?.description}&rdquo;? This
+              cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

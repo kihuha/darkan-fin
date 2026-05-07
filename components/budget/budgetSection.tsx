@@ -45,14 +45,13 @@ const MONTHS = [
 export const BudgetSection = () => {
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth() + 1; // 0-indexed to 1-indexed
+  const currentMonth = currentDate.getMonth() + 1;
 
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
   const [budgetData, setBudgetData] = useState<BudgetData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Generate year options (last year + this year + next 6 years = 8 total)
   const yearOptions = Array.from({ length: 8 }, (_, i) => currentYear - 1 + i);
 
   const fetchBudget = useCallback(async () => {
@@ -62,7 +61,6 @@ export const BudgetSection = () => {
         `/api/budget?month=${selectedMonth}&year=${selectedYear}`,
       );
       const result = await response.json();
-
       if (result.success) {
         setBudgetData(result.data);
       } else {
@@ -86,69 +84,94 @@ export const BudgetSection = () => {
   }));
 
   return (
-    <div className="relative left-1/2 right-1/2 min-h-screen w-screen -translate-x-1/2 overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute -right-20 -top-16 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl" />
-      <div className="pointer-events-none absolute -left-24 bottom-16 h-72 w-72 rounded-full bg-pink-500/10 blur-3xl" />
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Budget</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {MONTHS[selectedMonth - 1]} {selectedYear}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(value) => setSelectedYear(parseInt(value))}
+          >
+            <SelectTrigger className="w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((year) => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={selectedMonth.toString()}
+            onValueChange={(value) => setSelectedMonth(parseInt(value))}
+          >
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((month) => (
+                <SelectItem key={month.value} value={month.value.toString()}>
+                  {month.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </header>
 
-      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-4 md:px-6 md:py-6">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      {isLoading ? (
+        <div className="space-y-6">
+          <div className="flex items-baseline gap-5 border-y border-border py-3">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="ml-auto h-6 w-36" />
+          </div>
           <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Personal Finance
-            </p>
-            <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-              Budget
-            </h1>
+            <div className="flex items-center justify-between border-b border-border py-2.5">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-4 w-28" />
+            </div>
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between border-b border-border/40 py-2"
+              >
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-9 w-36" />
+              </div>
+            ))}
           </div>
-          <div className="flex items-center gap-2">
-            <Select
-              value={selectedYear.toString()}
-              onValueChange={(value) => setSelectedYear(parseInt(value))}
-            >
-              <SelectTrigger className="w-28 border-border bg-card/70 text-foreground dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-100">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-border bg-popover text-popover-foreground dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-                {yearOptions.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={selectedMonth.toString()}
-              onValueChange={(value) => setSelectedMonth(parseInt(value))}
-            >
-              <SelectTrigger className="w-36 border-border bg-card/70 text-foreground dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-100">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-border bg-popover text-popover-foreground dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-                {monthOptions.map((month) => (
-                  <SelectItem key={month.value} value={month.value.toString()}>
-                    {month.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div>
+            <div className="flex items-center justify-between border-b border-border py-2.5">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-4 w-28" />
+            </div>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between border-b border-border/40 py-2"
+              >
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-9 w-36" />
+              </div>
+            ))}
           </div>
-        </header>
-
-        {isLoading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-64 w-full" />
-          </div>
-        ) : budgetData ? (
-          <BudgetSpreadsheet
-            month={selectedMonth}
-            year={selectedYear}
-            categories={budgetData.categories || []}
-            onSave={fetchBudget}
-          />
-        ) : null}
-      </div>
+        </div>
+      ) : budgetData ? (
+        <BudgetSpreadsheet
+          month={selectedMonth}
+          year={selectedYear}
+          categories={budgetData.categories || []}
+          onSave={fetchBudget}
+        />
+      ) : null}
     </div>
   );
 };

@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-
+import { useEffect, useState, useCallback, useRef } from "react";
+import { motion, type Variants } from "motion/react";
 import {
   Select,
   SelectContent,
@@ -11,28 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clock3,
-  LayoutGrid,
-  List,
-  TrendingDown,
-  TrendingUp,
-} from "lucide-react";
 import { cn, MONTHS } from "@/lib/utils";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type TransactionWithCategory = {
   id: number;
@@ -64,8 +43,6 @@ type BudgetOverview = {
   isOverBudget: boolean;
 };
 
-type DashboardView = "grid" | "list";
-
 const formatCurrency = (amount: number) =>
   amount.toLocaleString("en-KE", {
     style: "currency",
@@ -73,44 +50,127 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   });
 
-const statusBadgeClasses = {
-  over: "bg-destructive/15 text-destructive border-destructive/30",
-  warning: "bg-amber-500/15 text-amber-500 border-amber-500/30",
-  onTrack: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
+const statusColors = {
+  over: { dot: "bg-red-500", bar: "bg-red-500" },
+  warning: { dot: "bg-amber-400", bar: "bg-amber-400" },
+  ok: { dot: "bg-emerald-500", bar: "bg-emerald-500" },
+} as const;
+
+function getStatus(item: BudgetOverview): "over" | "warning" | "ok" {
+  if (item.isOverBudget) return "over";
+  if (item.percentage > 70) return "warning";
+  return "ok";
+}
+
+// Animates a number from its previous value to `target` using ease-out quart.
+// Respects prefers-reduced-motion.
+function useAnimatedNumber(target: number, duration = 680): number {
+  const [displayed, setDisplayed] = useState(target);
+  const displayedRef = useRef(target);
+  const frameRef = useRef<number>(0);
+
+  displayedRef.current = displayed;
+
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setDisplayed(target);
+      return;
+    }
+
+    const startValue = displayedRef.current;
+    const startTime = performance.now();
+
+    cancelAnimationFrame(frameRef.current);
+
+    const tick = (now: number) => {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 4); // ease-out quart
+      setDisplayed(Math.round(startValue + (target - startValue) * eased));
+      if (t < 1) frameRef.current = requestAnimationFrame(tick);
+    };
+
+    frameRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [target, duration]);
+
+  return displayed;
+}
+
+const rowVariants: Variants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+  },
+};
+
+const listVariants: Variants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.04, delayChildren: 0.05 },
+  },
 };
 
 export default function DashboardPage() {
   const currentDate = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(
-    currentDate.getMonth() + 1,
-  );
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
-  const [view, setView] = useState<DashboardView>("grid");
+
   const [budgetData, setBudgetData] = useState<BudgetOverview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const [dataVersion, setDataVersion] = useState(0);
+
+  // Actual values — used for status/color logic (don't animate)
   const [totalBudget, setTotalBudget] = useState(0);
   const [totalSpent, setTotalSpent] = useState(0);
+
+  // Display targets — driven to 0 on load start, real value on load end
+  const [displayBudget, setDisplayBudget] = useState(0);
+  const [displaySpent, setDisplaySpent] = useState(0);
+  const [displayRemaining, setDisplayRemaining] = useState(0);
+
+  const animatedBudget = useAnimatedNumber(displayBudget);
+  const animatedSpent = useAnimatedNumber(displaySpent);
+  const animatedRemaining = useAnimatedNumber(Math.abs(displayRemaining));
+
+  const isOverallOverBudget = totalSpent > totalBudget;
+  const percentUsed = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+
+  const summaryBarColor = isOverallOverBudget
+    ? "bg-red-500"
+    : percentUsed > 70
+      ? "bg-amber-400"
+      : "bg-emerald-500";
 
   const yearOptions = Array.from(
     { length: 3 },
     (_, i) => currentDate.getFullYear() - i,
   );
-
   const monthOptions = MONTHS.map((month, index) => ({
     label: month,
     value: index + 1,
   }));
 
   const fetchBudgetOverview = useCallback(async () => {
+    setIsLoading(true);
+    // Animate current display values down to zero immediately
+    setDisplayBudget(0);
+    setDisplaySpent(0);
+    setDisplayRemaining(0);
+
     try {
-      setIsLoading(true);
+      const [budgetResponse, transactionResponse] = await Promise.all([
+        fetch(`/api/budget?month=${selectedMonth}&year=${selectedYear}`),
+        fetch(`/api/transaction?month=${selectedMonth}&year=${selectedYear}`),
+      ]);
 
-      // Fetch budget for selected month/year
-      const budgetResponse = await fetch(
-        `/api/budget?month=${selectedMonth}&year=${selectedYear}`,
-      );
       const budgetResult = await budgetResponse.json();
-
       if (!budgetResult.success) {
         setBudgetData([]);
         setTotalBudget(0);
@@ -118,33 +178,22 @@ export default function DashboardPage() {
         return;
       }
 
-      const budget = budgetResult.data;
-      const budgetCategories = budget.categories || [];
-
-      // Fetch transactions for selected month/year
-      const transactionResponse = await fetch(
-        `/api/transaction?month=${selectedMonth}&year=${selectedYear}`,
-      );
       const transactionResult = await transactionResponse.json();
-
       if (!transactionResponse.ok || !transactionResult.success) {
         toast.error("Failed to load transactions");
         return;
       }
 
-      const transactions: TransactionWithCategory[] =
-        transactionResult.data.rows;
+      const budgetCategories = budgetResult.data.categories || [];
+      const transactions: TransactionWithCategory[] = transactionResult.data.rows;
 
-      // Calculate spending per category
       const spendingByCategory = transactions
         .filter((t) => t.category_type === "expense")
-        .reduce((acc: Record<string, number>, transaction) => {
-          const categoryId = transaction.category_id;
-          acc[categoryId] = (acc[categoryId] || 0) + Number(transaction.amount);
+        .reduce((acc: Record<string, number>, t) => {
+          acc[t.category_id] = (acc[t.category_id] || 0) + Number(t.amount);
           return acc;
         }, {});
 
-      // Build overview data (only for expense categories with budgets)
       const overview: BudgetOverview[] = budgetCategories
         .filter(
           (item: BudgetCategory) =>
@@ -155,7 +204,6 @@ export default function DashboardPage() {
           const budgetAmount = Number(item.amount);
           const percentage =
             budgetAmount > 0 ? (spentAmount / budgetAmount) * 100 : 0;
-
           return {
             categoryId: item.category_id,
             categoryName: item.category_name,
@@ -166,20 +214,24 @@ export default function DashboardPage() {
           };
         })
         .sort((a: BudgetOverview, b: BudgetOverview) => {
-          // Sort overbudget items to top
           if (a.isOverBudget && !b.isOverBudget) return -1;
           if (!a.isOverBudget && b.isOverBudget) return 1;
-          // Then sort by percentage descending
           return b.percentage - a.percentage;
         });
 
+      const newBudget = overview.reduce((s, i) => s + i.budgetAmount, 0);
+      const newSpent = overview.reduce((s, i) => s + i.spentAmount, 0);
+
       setBudgetData(overview);
-      setTotalBudget(
-        overview.reduce((sum, item) => sum + item.budgetAmount, 0),
-      );
-      setTotalSpent(overview.reduce((sum, item) => sum + item.spentAmount, 0));
-    } catch (error) {
-      console.error("Error fetching budget overview:", error);
+      setTotalBudget(newBudget);
+      setTotalSpent(newSpent);
+      // Trigger count-up animation to real values
+      setDisplayBudget(newBudget);
+      setDisplaySpent(newSpent);
+      setDisplayRemaining(newBudget - newSpent);
+      setDataVersion((v) => v + 1);
+      setIsFirstLoad(false);
+    } catch {
       toast.error("Failed to load budget overview");
     } finally {
       setIsLoading(false);
@@ -188,403 +240,227 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchBudgetOverview();
-  }, [fetchBudgetOverview, selectedMonth, selectedYear]);
+  }, [fetchBudgetOverview]);
 
-  const isOverallOverBudget = totalSpent > totalBudget;
-  const remaining = totalBudget - totalSpent;
-  const percentUsed = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
-  const topAllocations = [...budgetData]
-    .sort((a, b) => b.budgetAmount - a.budgetAmount)
-    .slice(0, 5);
+  const showSkeleton = isLoading && isFirstLoad;
+  const dimCategories = isLoading && !isFirstLoad;
 
   return (
-    <div className="relative left-1/2 right-1/2 min-h-screen w-screen -translate-x-1/2 overflow-hidden bg-background text-foreground">
-      <div className="pointer-events-none absolute -right-20 -top-16 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl dark:bg-emerald-400/10" />
-      <div className="pointer-events-none absolute -left-24 bottom-16 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl" />
-
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-4 md:px-6 md:py-6">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Personal Finance
-            </p>
-            <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-              Dashboard
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={selectedYear.toString()}
-              onValueChange={(value) => setSelectedYear(parseInt(value))}
-            >
-              <SelectTrigger className="w-28 border-border bg-card/70 text-foreground dark:border-zinc-800 dark:bg-zinc-900/70">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-border bg-popover text-popover-foreground dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-                {yearOptions.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={selectedMonth.toString()}
-              onValueChange={(value) => setSelectedMonth(parseInt(value))}
-            >
-              <SelectTrigger className="w-28 border-border bg-card/70 text-foreground dark:border-zinc-800 dark:bg-zinc-900/70">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border-border bg-popover text-popover-foreground dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-                {monthOptions.map((month) => (
-                  <SelectItem key={month.value} value={month.value.toString()}>
-                    {month.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <ToggleGroup
-              type="single"
-              value={view}
-              onValueChange={(next) => {
-                if (next === "grid" || next === "list") {
-                  setView(next);
-                }
-              }}
-              variant="outline"
-              className="rounded-lg border border-border bg-card/70 dark:border-zinc-800 dark:bg-zinc-900/70"
-            >
-              <ToggleGroupItem value="grid" aria-label="Grid view">
-                <LayoutGrid className="h-4 w-4" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="list" aria-label="List view">
-                <List className="h-4 w-4" />
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-        </header>
-
-        {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card
-                key={i}
-                className="border-border bg-gradient-to-br from-card to-muted/40 dark:from-zinc-900/80 dark:to-zinc-900/40 dark:border-zinc-800"
-              >
-                <CardHeader>
-                  <Skeleton className="h-4 w-20" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-32" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="border-border bg-gradient-to-br from-card to-muted/40 dark:from-zinc-900/80 dark:to-zinc-900/40 dark:border-zinc-800">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Budget
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-3xl font-bold tracking-tight">
-                  {formatCurrency(totalBudget)}
-                </div>
-                <div className="grid h-8 grid-cols-12 items-end gap-1">
-                  {monthOptions.map((month) => {
-                    const selected = month.value === selectedMonth;
-                    return (
-                      <div
-                        key={month.value}
-                        className={cn(
-                          "rounded-sm bg-muted transition-all dark:bg-zinc-700/50",
-                          selected ? "h-full bg-indigo-500/70" : "h-1/2",
-                        )}
-                      />
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border bg-gradient-to-br from-card to-muted/40 dark:from-zinc-900/80 dark:to-zinc-900/40 dark:border-zinc-800">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Total Spent
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-3xl font-bold tracking-tight">
-                  {formatCurrency(totalSpent)}
-                </div>
-                <div className="flex items-center gap-3">
-                  <Progress
-                    value={Math.min(percentUsed, 100)}
-                    className="h-2.5 bg-muted [&>div]:bg-gradient-to-r [&>div]:from-red-400 [&>div]:to-amber-400 dark:bg-zinc-800"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {percentUsed.toFixed(0)}%
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-background dark:to-zinc-900/40">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Remaining
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div
-                  className={cn(
-                    "text-3xl font-bold tracking-tight",
-                    isOverallOverBudget ? "text-red-400" : "text-emerald-400",
-                  )}
-                >
-                  {isOverallOverBudget && "-"}
-                  {formatCurrency(Math.abs(remaining))}
-                </div>
-                <div className="inline-flex items-center gap-2 text-xs text-emerald-400">
-                  <Clock3 className="h-4 w-4" />
-                  {isOverallOverBudget ? "Budget limit exceeded" : "On budget"}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {!isLoading && budgetData.length > 0 && (
-          <Card className="border-border bg-card/70 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <CardContent className="grid gap-6 p-6 md:grid-cols-[180px_1fr] md:items-center">
-              <div className="relative mx-auto flex h-36 w-36 items-center justify-center">
-                <Progress
-                  value={Math.min(percentUsed, 100)}
-                  className="h-36 w-36 rounded-full bg-muted p-1 [&>div]:rounded-full [&>div]:bg-emerald-400 dark:bg-zinc-800"
-                />
-                <div className="absolute text-center">
-                  <p className="text-2xl font-bold">{percentUsed.toFixed(0)}%</p>
-                  <p className="text-xs text-muted-foreground">used</p>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="mb-4 text-base font-semibold">Top Allocations</h3>
-                <div className="space-y-3">
-                  {topAllocations.map((item) => {
-                    const allocationPct = (item.budgetAmount / totalBudget) * 100;
-                    return (
-                      <div key={item.categoryId} className="space-y-1.5">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>{item.categoryName}</span>
-                          <span className="text-muted-foreground">
-                            {allocationPct.toFixed(1)}%
-                          </span>
-                        </div>
-                        <Progress
-                          value={allocationPct}
-                          className="h-1.5 bg-muted [&>div]:bg-emerald-400 dark:bg-zinc-800"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Category Breakdown</h2>
-          <p className="text-xs text-muted-foreground">
-            {budgetData.length} categories · {MONTHS[selectedMonth - 1]}{" "}
-            {selectedYear}
+    <div>
+      {/* Header */}
+      <div className="flex items-start justify-between border-b pb-6 mb-6 dark:border-zinc-800">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Budget overview · {MONTHS[selectedMonth - 1]} {selectedYear}
           </p>
         </div>
+        <div className="flex gap-2">
+          <Select
+            value={selectedMonth.toString()}
+            onValueChange={(v) => setSelectedMonth(parseInt(v))}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((m) => (
+                <SelectItem key={m.value} value={m.value.toString()}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(v) => setSelectedYear(parseInt(v))}
+          >
+            <SelectTrigger className="w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => (
+                <SelectItem key={y} value={y.toString()}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
 
-        <Card className="border-border bg-card/70 dark:border-zinc-800 dark:bg-zinc-900/50">
-          <CardContent className="p-4 md:p-6">
-            {isLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
+      {/* Budget summary */}
+      {showSkeleton ? (
+        <div className="mb-8 space-y-3">
+          <Skeleton className="h-11 w-52" />
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-2 w-full mt-4" />
+        </div>
+      ) : (
+        <div className="mb-10">
+          <div className="flex items-end justify-between mb-3">
+            <div>
+              <div className="text-[2.75rem] font-bold tabular-nums tracking-tight leading-none">
+                {formatCurrency(animatedSpent)}
               </div>
-            ) : budgetData.length === 0 ? (
-              <div className="py-10 text-center text-muted-foreground">
-                No budget set for {MONTHS[selectedMonth - 1]} {selectedYear}
+              <div className="text-sm text-muted-foreground mt-1.5">
+                of {formatCurrency(animatedBudget)} budgeted
               </div>
-            ) : view === "grid" ? (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {budgetData.map((item) => {
-                  const itemRemaining = item.budgetAmount - item.spentAmount;
-                  const status = item.isOverBudget
-                    ? "over"
-                    : item.percentage > 70
-                      ? "warning"
-                      : "onTrack";
-
-                  return (
-                    <Card
-                      key={item.categoryId}
-                      className="border-border bg-card/80 transition hover:-translate-y-0.5 hover:border-border dark:border-zinc-800 dark:bg-zinc-900/70 dark:hover:border-zinc-700"
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <CardTitle className="text-base font-medium">
-                            {item.categoryName}
-                          </CardTitle>
-                          <Badge
-                            variant="outline"
-                            className={cn("gap-1", statusBadgeClasses[status])}
-                          >
-                            {item.isOverBudget ? (
-                              <TrendingUp className="h-3 w-3" />
-                            ) : item.percentage > 70 ? (
-                              <AlertCircle className="h-3 w-3" />
-                            ) : (
-                              <TrendingDown className="h-3 w-3" />
-                            )}
-                            {item.isOverBudget
-                              ? "Over"
-                              : item.percentage > 70
-                                ? "Warning"
-                                : "On Track"}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <p className="text-2xl font-bold">
-                          {formatCurrency(item.budgetAmount)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatCurrency(item.spentAmount)} spent ·{" "}
-                          <span
-                            className={cn(
-                              item.isOverBudget ? "text-red-400" : "text-emerald-400",
-                            )}
-                          >
-                            {item.isOverBudget && "-"}
-                            {formatCurrency(Math.abs(itemRemaining))} left
-                          </span>
-                        </p>
-                        <div className="space-y-1.5">
-                          <Progress
-                            value={Math.min(item.percentage, 100)}
-                            className={cn(
-                              "h-2 bg-muted dark:bg-zinc-800",
-                              item.isOverBudget
-                                ? "[&>div]:bg-red-400"
-                                : item.percentage > 70
-                                  ? "[&>div]:bg-amber-400"
-                                  : "[&>div]:bg-emerald-400",
-                            )}
-                          />
-                          <p className="text-right text-xs text-muted-foreground">
-                            {item.percentage.toFixed(0)}%
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-border hover:bg-transparent dark:border-zinc-800">
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Budget</TableHead>
-                      <TableHead className="text-right">Spent</TableHead>
-                      <TableHead className="text-right">Remaining</TableHead>
-                      <TableHead>Progress</TableHead>
-                      <TableHead className="text-right">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {budgetData.map((item) => {
-                      const itemRemaining = item.budgetAmount - item.spentAmount;
-                      const status = item.isOverBudget
-                        ? "over"
-                        : item.percentage > 70
-                          ? "warning"
-                          : "onTrack";
-
-                      return (
-                        <TableRow
-                          key={item.categoryId}
-                          className="border-border/80 hover:bg-muted/60 dark:border-zinc-800/80 dark:hover:bg-zinc-800/40"
-                        >
-                          <TableCell className="font-medium">
-                            {item.categoryName}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatCurrency(item.budgetAmount)}
-                          </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatCurrency(item.spentAmount)}
-                          </TableCell>
-                          <TableCell
-                            className={cn(
-                              "text-right",
-                              item.isOverBudget ? "text-red-400" : "text-emerald-400",
-                            )}
-                          >
-                            {item.isOverBudget && "-"}
-                            {formatCurrency(Math.abs(itemRemaining))}
-                          </TableCell>
-                          <TableCell className="min-w-36">
-                            <div className="flex items-center gap-2">
-                              <Progress
-                                value={Math.min(item.percentage, 100)}
-                                className={cn(
-                                  "h-2 bg-muted dark:bg-zinc-800",
-                                  item.isOverBudget
-                                    ? "[&>div]:bg-red-400"
-                                    : item.percentage > 70
-                                      ? "[&>div]:bg-amber-400"
-                                      : "[&>div]:bg-emerald-400",
-                                )}
-                              />
-                              <span className="text-xs text-muted-foreground">
-                                {item.percentage.toFixed(0)}%
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Badge
-                              variant="outline"
-                              className={cn("gap-1", statusBadgeClasses[status])}
-                            >
-                              {item.isOverBudget ? (
-                                <TrendingUp className="h-3 w-3" />
-                              ) : item.percentage > 70 ? (
-                                <AlertCircle className="h-3 w-3" />
-                              ) : (
-                                <CheckCircle2 className="h-3 w-3" />
-                              )}
-                              {item.isOverBudget
-                                ? "Over Budget"
-                                : item.percentage > 70
-                                  ? "Warning"
-                                  : "On Track"}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+            </div>
+            {totalBudget > 0 && (
+              <div className="text-right">
+                <div
+                  className={cn(
+                    "text-lg font-semibold tabular-nums",
+                    isOverallOverBudget
+                      ? "text-red-500"
+                      : "text-emerald-600 dark:text-emerald-400",
+                  )}
+                >
+                  {isOverallOverBudget ? "+" : ""}
+                  {formatCurrency(animatedRemaining)}
+                </div>
+                <div className="text-sm text-muted-foreground md:text-xs mt-0.5">
+                  {isOverallOverBudget ? "over budget" : "remaining"}
+                </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+
+          {totalBudget > 0 && (
+            <>
+              <div className="h-2 bg-muted dark:bg-zinc-800 rounded-full overflow-hidden">
+                <motion.div
+                  className={cn("h-full rounded-full", summaryBarColor)}
+                  animate={{ width: `${Math.min(percentUsed, 100)}%` }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 50,
+                    damping: 14,
+                    mass: 0.8,
+                  }}
+                />
+              </div>
+              <p className="text-sm text-muted-foreground md:text-xs mt-1.5">
+                {percentUsed.toFixed(0)}% of monthly budget spent
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Category list */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground md:text-xs">
+            Categories
+          </h2>
+          {!isLoading && budgetData.length > 0 && (
+            <span className="text-sm text-muted-foreground md:text-xs">
+              {budgetData.length} tracked
+            </span>
+          )}
+        </div>
+
+        {showSkeleton ? (
+          <div className="divide-y dark:divide-zinc-800">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="py-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-4 w-36" />
+                </div>
+                <Skeleton className="h-1.5 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : budgetData.length === 0 ? (
+          <div className="py-16 text-center">
+            <p className="text-sm text-muted-foreground">
+              No budget set for {MONTHS[selectedMonth - 1]} {selectedYear}
+            </p>
+            <p className="text-sm text-muted-foreground/60 md:text-xs mt-1">
+              Go to Budget to add category allocations
+            </p>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "transition-opacity duration-200",
+              dimCategories ? "pointer-events-none opacity-30" : "opacity-100",
+            )}
+          >
+            <motion.div
+              key={`cats-${dataVersion}`}
+              className="divide-y dark:divide-zinc-800"
+              initial="hidden"
+              animate="visible"
+              variants={listVariants}
+            >
+              {budgetData.map((item) => {
+                const status = getStatus(item);
+                const colors = statusColors[status];
+                const itemRemaining = item.budgetAmount - item.spentAmount;
+
+                return (
+                  <motion.div
+                    key={item.categoryId}
+                    variants={rowVariants}
+                    className="py-4"
+                  >
+                    <div className="flex items-start justify-between mb-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={cn(
+                            "mt-0.5 h-2 w-2 shrink-0 rounded-full",
+                            colors.dot,
+                          )}
+                        />
+                        <span className="text-sm font-medium truncate">
+                          {item.categoryName}
+                        </span>
+                        {item.isOverBudget && (
+                          <span className="shrink-0 text-sm font-medium text-red-500 md:text-xs">
+                            {formatCurrency(Math.abs(itemRemaining))} over
+                          </span>
+                        )}
+                      </div>
+                      <div className="ml-4 shrink-0 text-right">
+                        <span className="text-sm tabular-nums font-medium">
+                          {formatCurrency(item.spentAmount)}
+                        </span>
+                        <span className="text-sm text-muted-foreground md:text-xs">
+                          {" "}
+                          / {formatCurrency(item.budgetAmount)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted dark:bg-zinc-800">
+                        <motion.div
+                          className={cn("h-full rounded-full", colors.bar)}
+                          initial={{ width: "0%" }}
+                          animate={{
+                            width: `${Math.min(item.percentage, 100)}%`,
+                          }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 55,
+                            damping: 11,
+                            mass: 0.9,
+                          }}
+                        />
+                      </div>
+                      <span className="w-9 shrink-0 text-right text-sm tabular-nums text-muted-foreground md:text-xs">
+                        {item.percentage.toFixed(0)}%
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </div>
+        )}
       </div>
     </div>
   );
