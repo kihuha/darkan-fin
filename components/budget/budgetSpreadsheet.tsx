@@ -2,18 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Save } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Save, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { AiDialog } from "../ai-dialog";
+import { cn } from "@/lib/utils";
 
 interface CategoryBudgetItem {
   category_id: string;
@@ -112,103 +107,120 @@ export function BudgetSpreadsheet({
     }, 0);
   };
 
+  const formatCurrency = (amount: number) =>
+    amount.toLocaleString("en-KE", {
+      style: "currency",
+      currency: "KES",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
   const renderCategoryTable = (
-    title: string,
+    title: "Income" | "Expenses",
     cats: CategoryBudgetItem[],
     emptyMessage: string,
+    variant: "income" | "expense",
   ) => (
-    <div className="space-y-2">
-      <h3 className="text-lg font-semibold">{title}</h3>
-      <div className=" border border-white/60 dark:border-white/10 bg-white/70 dark:bg-white/5 shadow-sm backdrop-blur">
-        <div className="overflow-x-auto">
-          <Table className="min-w-90">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[60%]">Category</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cats.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={2}
-                    className="text-center text-muted-foreground"
-                  >
-                    {emptyMessage}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                <>
-                  {cats.map((category) => (
-                    <TableRow key={category.category_id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <span>{category.category_name}</span>
-                          {category.repeats && (
-                            <span className="text-xs text-muted-foreground">
-                              (Recurring)
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="text-right font-mono"
-                          value={budgetItems.get(category.category_id) || 0}
-                          onChange={(e) =>
-                            handleAmountChange(
-                              category.category_id,
-                              e.target.value,
-                            )
-                          }
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="bg-muted/40 font-semibold">
-                    <TableCell>Total</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {calculateTotal(cats).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </TableCell>
-                  </TableRow>
-                </>
-              )}
-            </TableBody>
-          </Table>
+    <Card className="overflow-hidden border-border bg-card/70 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <CardHeader className="border-b border-border pb-3 dark:border-zinc-800">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">{title}</CardTitle>
+          <Badge
+            variant="outline"
+            className="border-border text-muted-foreground dark:border-zinc-700 dark:text-zinc-300"
+          >
+            {cats.length} categories
+          </Badge>
         </div>
-      </div>
-    </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="grid grid-cols-[1fr_140px] border-b border-border px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground dark:border-zinc-800 dark:text-zinc-500 md:px-6">
+          <span>Category</span>
+          <span className="text-right">Amount</span>
+        </div>
+        {cats.length === 0 ? (
+          <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+            {emptyMessage}
+          </div>
+        ) : (
+          <>
+            {cats.map((category) => (
+              <div
+                key={category.category_id}
+                className="grid min-h-14 grid-cols-[1fr_140px] items-center gap-3 border-b border-border px-4 py-2 transition hover:bg-muted/60 dark:border-zinc-800/70 dark:hover:bg-zinc-800/40 md:px-6"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{category.category_name}</span>
+                  {category.repeats && (
+                    <Badge
+                      variant="outline"
+                      className="border-indigo-500/30 bg-indigo-500/10 text-indigo-300"
+                    >
+                      Recurring
+                    </Badge>
+                  )}
+                </div>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className={cn(
+                    "h-9 border-border bg-background text-right font-mono text-sm text-foreground dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100",
+                    "focus-visible:ring-indigo-500/60",
+                  )}
+                  value={budgetItems.get(category.category_id) || 0}
+                  onChange={(e) =>
+                    handleAmountChange(category.category_id, e.target.value)
+                  }
+                />
+              </div>
+            ))}
+            <div className="grid min-h-14 grid-cols-[1fr_140px] items-center bg-muted/60 px-4 py-2 dark:bg-zinc-800/50 md:px-6">
+              <span className="text-sm font-semibold">Total</span>
+              <span
+                className={cn(
+                  "text-right font-mono text-sm font-semibold",
+                  variant === "income" ? "text-emerald-400" : "text-rose-400",
+                )}
+              >
+                {formatCurrency(calculateTotal(cats))}
+              </span>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 
   const totalIncome = calculateTotal(incomeCategories);
   const totalExpenses = calculateTotal(expenseCategories);
   const netAmount = totalIncome - totalExpenses;
+  const recurringTotal = expenseCategories
+    .filter((cat) => cat.repeats)
+    .reduce((sum, cat) => sum + (budgetItems.get(cat.category_id) || 0), 0);
 
   return (
     <div className="space-y-6">
-      <div className="mt-4 flex gap-x-4 items-center justify-between">
-        <div className="space-y-1 flex items-center justify-between w-full">
-          <div className="text-sm text-muted-foreground">
-            Net Amount:{" "}
+      <Card
+        className={cn(
+          "border p-0",
+          netAmount >= 0
+            ? "border-emerald-500/30 bg-gradient-to-r from-emerald-500/10 to-background dark:to-zinc-900/40"
+            : "border-rose-500/30 bg-gradient-to-r from-rose-500/10 to-background dark:to-zinc-900/40",
+        )}
+      >
+        <CardContent className="flex flex-col items-start justify-between gap-3 p-4 md:flex-row md:items-center md:p-5">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Net Amount:</span>
             <span
-              className={`font-bold ${
-                netAmount >= 0 ? "text-green-600" : "text-red-600"
-              }`}
+              className={cn(
+                "font-mono text-xl font-bold",
+                netAmount >= 0 ? "text-emerald-400" : "text-rose-400",
+              )}
             >
-              {netAmount.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
+              {formatCurrency(netAmount)}
             </span>
           </div>
-
           <AiDialog
             context={{ incomeCategories, expenseCategories }}
             suggestions={[
@@ -224,44 +236,94 @@ export function BudgetSpreadsheet({
             contextLabel={`${new Date(year, month - 1).toLocaleString("default", { month: "long", year: "numeric" })} Budget`}
             placeholder="Ask for budgeting advice, tips, or insights based on your current budget data."
           />
-        </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="border-emerald-500/30 bg-emerald-500/10">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Income
+            </p>
+            <p className="mt-1 font-mono text-xl font-bold text-emerald-400">
+              {formatCurrency(totalIncome)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-rose-500/30 bg-rose-500/10">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Expenses
+            </p>
+            <p className="mt-1 font-mono text-xl font-bold text-rose-400">
+              {formatCurrency(totalExpenses)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-indigo-500/30 bg-indigo-500/10">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Recurring
+            </p>
+            <p className="mt-1 font-mono text-xl font-bold text-indigo-300">
+              {formatCurrency(recurringTotal)}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {categories.length === 0 ? (
-        <div className=" border border-white/60 p-8 text-center text-muted-foreground shadow-sm backdrop-blur">
+        <Card className="border-border bg-card/70 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <CardContent className="p-8 text-center text-muted-foreground">
           No categories available. Create categories first.
-        </div>
+          </CardContent>
+        </Card>
       ) : (
         <>
           {renderCategoryTable(
             "Income",
             incomeCategories,
             "No income categories. Create an income category first.",
+            "income",
           )}
           {renderCategoryTable(
             "Expenses",
             expenseCategories,
             "No expense categories. Create an expense category first.",
+            "expense",
           )}
         </>
       )}
-      <Button
-        onClick={handleSave}
-        disabled={isSaving}
-        className="w-full md:w-auto"
-      >
-        {isSaving ? (
-          <>
-            <Save className="mr-2 h-4 w-4 animate-pulse" />
-            Saving...
-          </>
-        ) : (
-          <>
-            <Save className="mr-2 h-4 w-4" />
-            Save Budget
-          </>
-        )}
-      </Button>
+
+      <Card className="border-border bg-card/70 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <CardContent className="flex flex-col items-start justify-between gap-4 p-4 md:flex-row md:items-center md:p-5">
+          <p className="text-sm text-muted-foreground">
+            {expenseCategories.filter((c) => (budgetItems.get(c.category_id) || 0) > 0)
+              .length}{" "}
+            expense categories and{" "}
+            {incomeCategories.filter((c) => (budgetItems.get(c.category_id) || 0) > 0)
+              .length}{" "}
+            income sources have values.
+          </p>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="w-full gap-2 md:w-auto"
+          >
+            {isSaving ? (
+              <>
+                <Save className="h-4 w-4 animate-pulse" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Save Budget
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

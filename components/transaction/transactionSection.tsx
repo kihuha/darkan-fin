@@ -285,132 +285,143 @@ export const TransactionSection = () => {
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-10 w-full sm:w-40" />
-        </div>
-        <div className="space-y-2">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
+      <div className="relative left-1/2 right-1/2 min-h-screen w-screen -translate-x-1/2 overflow-hidden bg-background px-4 py-4 md:px-6 md:py-6">
+        <div className="mx-auto max-w-7xl space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Skeleton className="h-8 w-40" />
+            <Skeleton className="h-10 w-full sm:w-40" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Transactions
-          </h2>
-          <p className="text-sm text-muted-foreground sm:text-base">
-            Track all your income and expenses
-          </p>
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <TransactionFilters
-            categories={uniqueCategories}
-            selectedCategory={selectedCategoryFilter}
-            onCategoryChange={setSelectedCategoryFilter}
-            selectedMonth={selectedMonth}
-            selectedYear={selectedYear}
-            onMonthChange={setSelectedMonth}
-            onYearChange={setSelectedYear}
-            onRecategorize={handleRecategorize}
-            isRecategorizing={isRecategorizing}
-            onImported={fetchTransactions}
-          />
+    <div className="relative left-1/2 right-1/2 min-h-screen w-screen -translate-x-1/2 overflow-hidden bg-background text-foreground">
+      <div className="pointer-events-none absolute -left-24 -top-16 h-72 w-72 rounded-full bg-indigo-500/10 blur-3xl dark:bg-indigo-400/10" />
+      <div className="pointer-events-none absolute -bottom-16 -right-16 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl dark:bg-emerald-400/10" />
+      <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-4 md:px-6 md:py-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Personal Finance
+            </p>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Transactions
+            </h2>
+            <p className="text-sm text-muted-foreground sm:text-base">
+              Track all your income and expenses
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <TransactionFilters
+              categories={uniqueCategories}
+              selectedCategory={selectedCategoryFilter}
+              onCategoryChange={setSelectedCategoryFilter}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              onMonthChange={setSelectedMonth}
+              onYearChange={setSelectedYear}
+              onRecategorize={handleRecategorize}
+              isRecategorizing={isRecategorizing}
+              onImported={fetchTransactions}
+            />
 
-          <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
-            <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto">
-                <Plus className="mr-2 h-4 w-4" />
-                New Transaction
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-125">
-              <DialogHeader>
-                <DialogTitle>
-                  {selectedTransaction ? "Edit Transaction" : "New Transaction"}
-                </DialogTitle>
-                <DialogDescription>
-                  {selectedTransaction
-                    ? "Update the details of your transaction"
-                    : "Add a new transaction to track your finances"}
-                </DialogDescription>
-              </DialogHeader>
-              <TransactionForm
-                transaction={selectedTransaction}
-                onSuccess={handleSuccess}
-                onDelete={handleDelete}
-                onCancel={() => handleDialogChange(false)}
-              />
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      {transactions.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>No transactions in this period</EmptyTitle>
-            <EmptyDescription>
-              Try selecting a different month or year, or add a new transaction
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
-              <StatementImportDialog
-                onImported={fetchTransactions}
-                triggerClassName="w-full sm:w-auto"
-                triggerVariant="outline"
-              />
-              <Button
-                onClick={() => setIsDialogOpen(true)}
-                className="hidden w-full md:w-auto"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add Transaction
-              </Button>
-            </div>
-          </EmptyContent>
-        </Empty>
-      ) : filteredTransactions.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>No transactions in this category</EmptyTitle>
-            <EmptyDescription>
-              Try selecting a different category or add a new transaction
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <div className="space-y-5">
-          {groupedTransactions.map(([dateKey, dayTransactions]) => {
-            const [year, month, day] = dateKey.split("-").map(Number);
-            const dayDate = new Date(year, month - 1, day);
-
-            return (
-              <section key={dateKey} className="space-y-2">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  {format(dayDate, "EEEE, MMM d, yyyy")}
-                </h3>
-                <TransactionTable
-                  transactions={dayTransactions}
-                  onEdit={handleEdit}
-                  onCategoryChange={handleCategoryChange}
-                  onDelete={handleBulkDelete}
-                  showDateColumn={false}
+            <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
+              <DialogTrigger asChild>
+                <Button className="w-full sm:w-auto">
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Transaction
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-125">
+                <DialogHeader>
+                  <DialogTitle>
+                    {selectedTransaction ? "Edit Transaction" : "New Transaction"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {selectedTransaction
+                      ? "Update the details of your transaction"
+                      : "Add a new transaction to track your finances"}
+                  </DialogDescription>
+                </DialogHeader>
+                <TransactionForm
+                  transaction={selectedTransaction}
+                  onSuccess={handleSuccess}
+                  onDelete={handleDelete}
+                  onCancel={() => handleDialogChange(false)}
                 />
-              </section>
-            );
-          })}
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-      )}
+
+        {transactions.length === 0 ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>No transactions in this period</EmptyTitle>
+              <EmptyDescription>
+                Try selecting a different month or year, or add a new transaction
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
+                <StatementImportDialog
+                  onImported={fetchTransactions}
+                  triggerClassName="w-full sm:w-auto"
+                  triggerVariant="outline"
+                />
+                <Button
+                  onClick={() => setIsDialogOpen(true)}
+                  className="hidden w-full md:w-auto"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Transaction
+                </Button>
+              </div>
+            </EmptyContent>
+          </Empty>
+        ) : filteredTransactions.length === 0 ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyTitle>No transactions in this category</EmptyTitle>
+              <EmptyDescription>
+                Try selecting a different category or add a new transaction
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="space-y-5">
+            {groupedTransactions.map(([dateKey, dayTransactions]) => {
+              const [year, month, day] = dateKey.split("-").map(Number);
+              const dayDate = new Date(year, month - 1, day);
+
+              return (
+                <section key={dateKey} className="space-y-2">
+                  <h3 className="text-sm font-medium text-muted-foreground">
+                    {format(dayDate, "EEEE, MMM d, yyyy")}
+                  </h3>
+                  <div className="rounded-xl border bg-card/80 p-1 backdrop-blur">
+                    <TransactionTable
+                      transactions={dayTransactions}
+                      onEdit={handleEdit}
+                      onCategoryChange={handleCategoryChange}
+                      onDelete={handleBulkDelete}
+                      showDateColumn={false}
+                    />
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <AlertDialog
         open={!!transactionToDelete}

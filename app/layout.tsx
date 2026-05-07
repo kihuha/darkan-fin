@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Figtree } from "next/font/google";
+import { Geist_Mono, Inter, Figtree } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 
-const figtree = Figtree({
+const fontSans = Inter({
   variable: "--font-sans",
+  subsets: ["latin"],
+});
+
+const fontTitle = Figtree({
+  variable: "--font-title",
   subsets: ["latin"],
 });
 
@@ -28,7 +33,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${figtree.variable} ${geistMono.variable} min-h-full`}
+      className={`${fontTitle.variable} ${fontSans.variable} ${geistMono.variable} min-h-full`}
     >
       <body className="font-sans antialiased h-full">
         <TooltipProvider>
@@ -43,6 +48,11 @@ export default function RootLayout({
         </TooltipProvider>
 
         <Toaster />
+
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+        />
       </body>
     </html>
   );
