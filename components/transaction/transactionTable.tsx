@@ -217,6 +217,20 @@ export function TransactionTable({
   });
 
   const selectedCount = table.getFilteredSelectedRowModel().rows.length;
+  const isMobileRowSelected = (transactionId: string) =>
+    Boolean((rowSelection as Record<string, boolean>)[transactionId]);
+
+  const toggleMobileRowSelection = (transactionId: string, checked: boolean) => {
+    setRowSelection((prev) => {
+      const next = { ...(prev as Record<string, boolean>) };
+      if (checked) {
+        next[transactionId] = true;
+      } else {
+        delete next[transactionId];
+      }
+      return next;
+    });
+  };
   const formatAmount = (transaction: TransactionWithCategory) =>
     `${transaction.category_type === "income" ? "+" : ""}${Number(
       transaction.amount,
@@ -259,7 +273,7 @@ export function TransactionTable({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
+                    <p className="text-sm font-medium break-words whitespace-normal">
                       {transaction.description || "No description"}
                     </p>
                     {showDateColumn && (
@@ -304,6 +318,18 @@ export function TransactionTable({
                 </Select>
 
                 <div className="flex items-center justify-end gap-2">
+                  <div className="mr-auto">
+                    <Checkbox
+                      checked={isMobileRowSelected(transaction.id!.toString())}
+                      onCheckedChange={(checked) =>
+                        toggleMobileRowSelection(
+                          transaction.id!.toString(),
+                          checked === true,
+                        )
+                      }
+                      aria-label="Select transaction"
+                    />
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"

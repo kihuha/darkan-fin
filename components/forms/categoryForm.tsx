@@ -37,29 +37,53 @@ interface CategoryFormProps {
   onDelete?: (category: Category) => void;
 }
 
-const formSchema = z.object({
-  id: z.string().optional(),
-  name: z
-    .string()
-    .min(1, "Category name is required")
-    .max(100, "Category name must be less than 100 characters"),
-  type: z.enum(["income", "expense"]),
-  amount: z
-    .string()
-    .refine(
-      (value) =>
-        value === "" || (!Number.isNaN(Number(value)) && Number(value) >= 0),
-      "Amount must be a valid positive number",
-    )
-    .optional(),
-  repeats: z.boolean(),
-  description: z
-    .string()
-    .max(500, "Description must be less than 500 characters")
-    .optional()
-    .nullable(),
-  tags: z.array(z.string().min(1).max(50)).optional(),
-});
+const formSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z
+      .string()
+      .min(1, "Category name is required")
+      .max(100, "Category name must be less than 100 characters"),
+    type: z.enum(["income", "expense"]),
+    amount: z
+      .string()
+      .refine(
+        (value) =>
+          value === "" || (!Number.isNaN(Number(value)) && Number(value) >= 0),
+        "Amount must be a valid positive number",
+      )
+      .optional(),
+    repeats: z.boolean(),
+    description: z
+      .string()
+      .max(500, "Description must be less than 500 characters")
+      .optional()
+      .nullable(),
+    tags: z.array(z.string().min(1).max(50)).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.repeats) {
+      return;
+    }
+
+    if (!data.amount || data.amount.trim() === "") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amount"],
+        message: "Amount is required for recurring categories",
+      });
+      return;
+    }
+
+    const parsed = Number(data.amount);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amount"],
+        message: "Amount must be a valid positive number",
+      });
+    }
+  });
 
 export function CategoryForm({
   category,
@@ -322,11 +346,6 @@ export function CategoryForm({
                       placeholder="Type a tag and press Enter"
                       value={tagInput}
                       onChange={(event) => setTagInput(event.target.value)}
-                      onBlur={() => {
-                        if (tagInput.trim()) {
-                          addTags(tagInput);
-                        }
-                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
