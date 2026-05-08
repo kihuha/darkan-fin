@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BudgetSpreadsheet } from "./budgetSpreadsheet";
+import { InsightsCard } from "@/components/insights/insightsCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
@@ -51,6 +52,7 @@ export const BudgetSection = () => {
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
   const [budgetData, setBudgetData] = useState<BudgetData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [insightsRefreshSignal, setInsightsRefreshSignal] = useState(0);
 
   const yearOptions = Array.from({ length: 8 }, (_, i) => currentYear - 1 + i);
 
@@ -165,12 +167,21 @@ export const BudgetSection = () => {
           </div>
         </div>
       ) : budgetData ? (
-        <BudgetSpreadsheet
-          month={selectedMonth}
-          year={selectedYear}
-          categories={budgetData.categories || []}
-          onSave={fetchBudget}
-        />
+        <>
+          <InsightsCard
+            surface="budget"
+            refreshSignal={insightsRefreshSignal}
+          />
+          <BudgetSpreadsheet
+            month={selectedMonth}
+            year={selectedYear}
+            categories={budgetData.categories || []}
+            onSave={() => {
+              fetchBudget();
+              setInsightsRefreshSignal((v) => v + 1);
+            }}
+          />
+        </>
       ) : null}
     </div>
   );

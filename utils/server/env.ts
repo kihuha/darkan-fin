@@ -17,6 +17,9 @@ const envSchema = z
       .string()
       .min(16, "INVITE_TOKEN_PEPPER must be at least 16 characters")
       .optional(),
+    GEMINI_API_KEY: z.string().min(1).optional(),
+    GEMINI_TEXT_MODEL: z.string().min(1).optional(),
+    GEMINI_STRUCTURED_MODEL: z.string().min(1).optional(),
   })
   .passthrough();
 

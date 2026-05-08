@@ -6,6 +6,7 @@ import { TransactionTable } from "./transactionTable";
 import { TransactionForm } from "../forms/transactionForm";
 import { StatementImportDialog } from "./statementImportDialog";
 import { TransactionFilters } from "./transactionFilters";
+import { InsightsCard } from "@/components/insights/insightsCard";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -74,6 +75,7 @@ export const TransactionSection = () => {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<
     string | null
   >(null);
+  const [insightsRefreshSignal, setInsightsRefreshSignal] = useState(0);
   const [selectedMonth, setSelectedMonth] = useState(
     () => new Date().getMonth() + 1,
   );
@@ -151,6 +153,7 @@ export const TransactionSection = () => {
       if (response.status === 204) {
         toast.success("Transaction deleted");
         fetchTransactions();
+        bumpInsights();
       } else {
         const result = await response.json();
         toast.error(result.error || "Failed to delete transaction");
@@ -209,6 +212,7 @@ export const TransactionSection = () => {
         toast.success(
           `Deleted ${transactionIds.length} transaction${transactionIds.length === 1 ? "" : "s"}`,
         );
+        bumpInsights();
       } else {
         toast.error("Some transactions failed to delete");
         fetchTransactions();
@@ -219,10 +223,13 @@ export const TransactionSection = () => {
     }
   };
 
+  const bumpInsights = () => setInsightsRefreshSignal((v) => v + 1);
+
   const handleSuccess = () => {
     setIsDialogOpen(false);
     setSelectedTransaction(null);
     fetchTransactions();
+    bumpInsights();
   };
 
   const handleDialogChange = (open: boolean) => {
@@ -398,7 +405,17 @@ export const TransactionSection = () => {
           onCategoryChange={setSelectedCategoryFilter}
           onRecategorize={handleRecategorize}
           isRecategorizing={isRecategorizing}
-          onImported={fetchTransactions}
+          onImported={() => {
+            fetchTransactions();
+            bumpInsights();
+          }}
+        />
+      </div>
+
+      <div className="mb-6">
+        <InsightsCard
+          surface="transactions"
+          refreshSignal={insightsRefreshSignal}
         />
       </div>
 
@@ -411,7 +428,10 @@ export const TransactionSection = () => {
           </p>
           <div className="flex justify-center gap-2">
             <StatementImportDialog
-              onImported={fetchTransactions}
+              onImported={() => {
+                fetchTransactions();
+                bumpInsights();
+              }}
               triggerVariant="outline"
             />
             <Button onClick={() => setIsDialogOpen(true)}>

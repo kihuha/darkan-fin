@@ -23,6 +23,7 @@ import { ModeToggle } from "./mode-toggle";
 const navigation = [
   { name: "Dashboard", href: "/dashboard" },
   { name: "Budget", href: "/dashboard/budget" },
+  { name: "Goals", href: "/dashboard/goal" },
   { name: "Categories", href: "/dashboard/categories" },
   { name: "Transactions", href: "/dashboard/transaction" },
 ];

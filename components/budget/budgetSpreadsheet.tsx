@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Save } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Sparkles, Save } from "lucide-react";
 import { toast } from "sonner";
+
 import { AiDialog } from "../ai-dialog";
+import {
+  AiProposalDialog,
+  type AiProposal,
+  type AiProposalItem,
+} from "./aiProposalDialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface CategoryBudgetItem {
@@ -35,6 +41,9 @@ export function BudgetSpreadsheet({
     new Map(),
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<
+    Map<string, AiProposalItem>
+  >(new Map());
 
   useEffect(() => {
     const itemsMap = new Map<string, number>();
@@ -81,6 +90,47 @@ export function BudgetSpreadsheet({
   const expenseCategories = categories.filter(
     (cat) => cat.category_type === "expense",
   );
+
+  const proposalCategoryRows = useMemo(
+    () =>
+      categories.map((c) => ({
+        category_id: c.category_id,
+        category_name: c.category_name,
+        category_type: c.category_type,
+        current_amount: budgetItems.get(c.category_id) ?? c.amount,
+      })),
+    [categories, budgetItems],
+  );
+
+  const handleApplyProposal = (amounts: Record<string, number>) => {
+    setBudgetItems((prev) => {
+      const next = new Map(prev);
+      for (const [category_id, amount] of Object.entries(amounts)) {
+        next.set(category_id, amount);
+      }
+      return next;
+    });
+  };
+
+  const handleProposalLoaded = (proposal: AiProposal | null) => {
+    if (!proposal) {
+      setAiSuggestions(new Map());
+      return;
+    }
+    const next = new Map<string, AiProposalItem>();
+    for (const item of proposal.items) {
+      next.set(item.category_id, item);
+    }
+    setAiSuggestions(next);
+  };
+
+  const handleApplySingleSuggestion = (
+    category_id: string,
+    suggested_amount: number,
+  ) => {
+    setBudgetItems((prev) => new Map(prev).set(category_id, suggested_amount));
+    toast.success("Suggestion applied — remember to save.");
+  };
 
   const calculateTotal = (cats: CategoryBudgetItem[]) =>
     cats.reduce((sum, cat) => sum + (budgetItems.get(cat.category_id) || 0), 0);
@@ -133,37 +183,69 @@ export function BudgetSpreadsheet({
           {emptyMessage}
         </p>
       ) : (
-        cats.map((cat) => (
-          <div
-            key={cat.category_id}
-            className="-mx-1 flex items-center gap-3 rounded-sm border-b border-border/40 px-1 py-1.5 transition-colors hover:bg-muted/30"
-          >
-            <span className="flex-1 truncate text-sm font-medium">
-              {cat.category_name}
-            </span>
-            {cat.repeats && (
-              <span className="shrink-0 text-sm font-medium text-muted-foreground/60 md:text-xs">
-                Recurring
-              </span>
-            )}
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              value={budgetItems.get(cat.category_id) || 0}
-              onChange={(e) =>
-                handleAmountChange(cat.category_id, e.target.value)
-              }
-              className={cn(
-                "h-9 w-36 shrink-0 text-right font-mono text-sm tabular-nums",
-                "border-transparent bg-transparent shadow-none",
-                "hover:border-border/60 hover:bg-muted/20",
-                "focus-visible:border-border focus-visible:bg-background focus-visible:ring-0 focus-visible:shadow-sm",
-                "transition-all duration-150",
+        cats.map((cat) => {
+          const currentValue = budgetItems.get(cat.category_id) ?? 0;
+          const suggestion = aiSuggestions.get(cat.category_id);
+          const showSuggestion =
+            suggestion &&
+            Math.round(suggestion.suggested_amount) !== Math.round(currentValue);
+          return (
+            <div
+              key={cat.category_id}
+              className="-mx-1 flex flex-col gap-1 rounded-sm border-b border-border/40 px-1 py-1.5 transition-colors hover:bg-muted/30"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex-1 truncate text-sm font-medium">
+                  {cat.category_name}
+                </span>
+                {cat.repeats && (
+                  <span className="shrink-0 text-sm font-medium text-muted-foreground/60 md:text-xs">
+                    Recurring
+                  </span>
+                )}
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={budgetItems.get(cat.category_id) || 0}
+                  onChange={(e) =>
+                    handleAmountChange(cat.category_id, e.target.value)
+                  }
+                  className={cn(
+                    "h-9 w-36 shrink-0 text-right font-mono text-sm tabular-nums",
+                    "border-transparent bg-transparent shadow-none",
+                    "hover:border-border/60 hover:bg-muted/20",
+                    "focus-visible:border-border focus-visible:bg-background focus-visible:ring-0 focus-visible:shadow-sm",
+                    "transition-all duration-150",
+                  )}
+                />
+              </div>
+              {showSuggestion && (
+                <div className="flex items-start justify-end gap-2 pl-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleApplySingleSuggestion(
+                        cat.category_id,
+                        suggestion.suggested_amount,
+                      )
+                    }
+                    className={cn(
+                      "group inline-flex items-center gap-1.5 rounded-full border border-violet-300/50 bg-violet-50/60 px-2 py-0.5 text-xs",
+                      "text-violet-700 transition-colors hover:bg-violet-100",
+                      "dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20",
+                    )}
+                    title={suggestion.rationale}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    AI: {formatCurrency(suggestion.suggested_amount)}
+                    <span className="opacity-60 group-hover:opacity-100">apply</span>
+                  </button>
+                </div>
               )}
-            />
-          </div>
-        ))
+            </div>
+          );
+        })
       )}
     </div>
   );
@@ -191,7 +273,7 @@ export function BudgetSpreadsheet({
             {formatCurrency(totalExpenses)}
           </span>
         </div>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex flex-wrap items-center gap-3">
           <div className="flex items-baseline gap-1.5">
             <span className="text-sm font-medium uppercase tracking-widest text-muted-foreground md:text-xs">
               Net
@@ -206,6 +288,13 @@ export function BudgetSpreadsheet({
               {formatCurrency(netAmount)}
             </span>
           </div>
+          <AiProposalDialog
+            month={month}
+            year={year}
+            categories={proposalCategoryRows}
+            onApply={handleApplyProposal}
+            onProposalLoaded={handleProposalLoaded}
+          />
           <AiDialog
             context={{ incomeCategories, expenseCategories }}
             suggestions={[

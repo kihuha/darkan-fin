@@ -1,9 +1,10 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { type Category } from "@/lib/validations/category";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -27,10 +28,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import z from "zod";
+import { cn } from "@/lib/utils";
 import { TransactionWithCategory } from "../transaction/transactionSection";
+
+type TransactionCheckResult = {
+  category_name: string;
+  category_type: "income" | "expense";
+  budgeted_amount: number;
+  spent_so_far: number;
+  projected_total: number;
+  projected_remaining: number;
+  would_overspend: boolean;
+  overspend_amount: number;
+  budget_exists: boolean;
+  primary_goal: {
+    id: string;
+    name: string;
+    required_monthly_contribution: number;
+  } | null;
+  deters_primary_goal: boolean;
+  friendly_message: string | null;
+};
 
 interface TransactionFormProps {
   transaction?: {
@@ -55,6 +76,8 @@ export function TransactionForm({
   const isEditing = !!transaction?.id;
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [check, setCheck] = useState<TransactionCheckResult | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
 
   const formSchema = z.object({
     category_id: z.string().min(1, "Category is required"),
@@ -81,6 +104,16 @@ export function TransactionForm({
     },
   });
 
+  const watchedCategoryId = useWatch({
+    control: form.control,
+    name: "category_id",
+  });
+  const watchedAmount = useWatch({ control: form.control, name: "amount" });
+  const watchedDate = useWatch({
+    control: form.control,
+    name: "transaction_date",
+  });
+
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -103,6 +136,73 @@ export function TransactionForm({
 
     fetchCategories();
   }, []);
+
+  // Debounced server-side check whenever the user changes category/amount/date.
+  useEffect(() => {
+    const amountNumber = Number(watchedAmount);
+    if (
+      !watchedCategoryId ||
+      !watchedDate ||
+      Number.isNaN(amountNumber) ||
+      amountNumber <= 0
+    ) {
+      setCheck(null);
+      return;
+    }
+
+    const matched = categories.find(
+      (c) => c.id?.toString() === watchedCategoryId,
+    );
+    // Skip checks for income — overspend doesn't apply.
+    if (matched && matched.type === "income") {
+      setCheck(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const handle = window.setTimeout(async () => {
+      try {
+        setIsChecking(true);
+        const response = await fetch("/api/transaction/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            category_id: watchedCategoryId,
+            amount: amountNumber,
+            transaction_date: watchedDate,
+            ...(transaction?.id
+              ? { exclude_transaction_id: transaction.id.toString() }
+              : {}),
+          }),
+          signal: controller.signal,
+        });
+        const result = await response.json();
+        if (response.ok && result.success) {
+          setCheck(result.data as TransactionCheckResult);
+        } else {
+          setCheck(null);
+        }
+      } catch (error) {
+        if ((error as { name?: string })?.name !== "AbortError") {
+          // Silently swallow; this is an enhancement, not a blocker.
+          setCheck(null);
+        }
+      } finally {
+        setIsChecking(false);
+      }
+    }, 400);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(handle);
+    };
+  }, [
+    watchedCategoryId,
+    watchedAmount,
+    watchedDate,
+    categories,
+    transaction?.id,
+  ]);
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
@@ -263,6 +363,39 @@ export function TransactionForm({
           )}
         />
 
+        {check?.friendly_message && (
+          <Alert
+            className={cn(
+              "border-amber-300/60 bg-amber-50/40 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-200",
+              check.deters_primary_goal &&
+                "border-rose-300/60 bg-rose-50/40 text-rose-900 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-200",
+            )}
+          >
+            {check.deters_primary_goal ? (
+              <AlertTriangle />
+            ) : (
+              <Sparkles />
+            )}
+            <AlertTitle>
+              {check.deters_primary_goal
+                ? "This may slow your goal"
+                : "Just a quick check-in"}
+            </AlertTitle>
+            <AlertDescription className="text-current/90">
+              <p>{check.friendly_message}</p>
+              {check.budget_exists && (
+                <p className="text-xs opacity-80">
+                  After this: {Math.round(check.projected_total).toLocaleString(
+                    "en-KE",
+                  )}{" "}
+                  / {Math.round(check.budgeted_amount).toLocaleString("en-KE")} KES
+                  used in {check.category_name}.
+                </p>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex justify-between gap-2">
           {onDelete && isEditing && (
             <Button
@@ -277,7 +410,12 @@ export function TransactionForm({
             </Button>
           )}
 
-          <div className="flex items-center gap-x-2">
+          <div className="ml-auto flex items-center gap-x-2">
+            {isChecking && (
+              <span className="text-xs text-muted-foreground">
+                Checking budget…
+              </span>
+            )}
             {onCancel && (
               <Button type="button" variant="outline" onClick={onCancel}>
                 Cancel
